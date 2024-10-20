@@ -13,15 +13,40 @@
 #include <cstdlib>             // For general-purpose functions like exit()
 #include <unistd.h>            // For close()
 #include <cstring>             // For C-style string manipulation (memset)
+#include <vector>
 
 /* Constants */
 #define RCVBUFSIZE 512         // The receive buffer size
 #define SNDBUFSIZE 512         // The send buffer size
 
+struct MessageRequest {
+    // std::vector<std::string> payLoad;
+    std::string requestType;
+};
+
 void fatal_error(const std::string& message) {
     perror(message.c_str());
     exit(1);
 }
+
+void msg_display(int &option) {
+    std::cout << "Message Options" << std::endl;
+    std::cout << "1. List Files" << std::endl;
+    std::cout << "2. List Difference" << std::endl;
+    std::cout << "3. Pull Changes" << std::endl;
+    std::cout << "4. Leave" << std::endl;
+    std::cout << std::endl;
+    std::cout << "Enter option: " << std::endl;
+
+    std::cin >> option;
+}
+
+MessageRequest createMessage(const std::string &type) {
+    MessageRequest req;
+    req.requestType = type;
+    return req;
+}
+
 
 /* The main function */
 int main(int argc, char *argv[]) {
@@ -32,13 +57,8 @@ int main(int argc, char *argv[]) {
 
     char rcvBuf[RCVBUFSIZE];        // Receive Buffer
     
-    // Check if proper command-line arguments are provided
-    if (argc != 2) {
-        std::cerr << "Incorrect input format. The correct format is:\n\tnameChanger your_name\n";
-        exit(1);
-    }
 
-    studentName = argv[1];          // Assign student's name from command line
+    // studentName = argv[1];          // Assign student's name from command line
     memset(rcvBuf, 0, RCVBUFSIZE);  // Clear receive buffer
 
     // Create a new TCP socket
@@ -67,10 +87,34 @@ int main(int argc, char *argv[]) {
     int returnBytes = 0;      // Initialize number of received bytes
     std::string serverResponse; // String to store the server response
 
-    // Continue receiving until no more data is available
-    while ((returnBytes = recv(clientSock, rcvBuf, RCVBUFSIZE - 1, 0)) > 0) {
-        rcvBuf[returnBytes] = '\0';    // Null-terminate the received chunk
-        serverResponse += std::string(rcvBuf);  // Append received data to the response string
+    while (true) {
+        int option;
+        MessageRequest req;
+
+        msg_display(option);
+
+        switch(option) {
+            case 1:
+                req = createMessage("LIST");
+                std::cout << req.requestType << std::endl;
+                send(clientSock, &req, sizeof(req), 0);
+                break;
+            case 2:
+                req = createMessage("DIFF");
+                std::cout << req.requestType << std::endl; 
+                break;
+            case 3:
+                req = createMessage("PULL");
+                std::cout << req.requestType << std::endl;
+                break;
+            case 4:
+                req = createMessage("LEAVE");
+                std::cout << req.requestType << std::endl;
+                break;
+            default:
+                std::cout << "Invalid option. Selection a message between" << std::endl;
+                continue;
+        }
     }
 
     if (returnBytes < 0) {
