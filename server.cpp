@@ -14,6 +14,8 @@
 #include <openssl/evp.h>   // For OpenSSL EVP digest libraries/SHA256
 #include <string>          // For std::string
 #include <algorithm>
+#include <filesystem>
+namespace fs = std::filesystem;
 
 #define RCVBUFSIZE 512     // The receive buffer size
 #define SNDBUFSIZE 512     // The send buffer size
@@ -25,16 +27,38 @@ void fatal_error(const std::string& message) {
     exit(1);
 }
 
+void listFiles(const std::string &currentDirectoryPath, std::string &fileList){
+    for (const auto &entry : fs::directory_iterator(currentDirectoryPath)) {
+        fileList += entry.path().filename().string() + "\n";  // Add each file name to the string
+    }
+}
 
-void executeCommand(std::string &nameBuf) {
-    std::cout << "before execution" << std::endl;
-    std::cout << nameBuf << std::endl;
+
+void executeCommand(std::string &nameBuf,const std::string &currentDirectoryPath,std::string &fileList,
+int &clientSock) {
+    //Eliminate whitespace
     nameBuf.erase(std::remove_if(nameBuf.begin(), nameBuf.end(), ::isspace), nameBuf.end());
-    std::cout << nameBuf << std::endl;
+
     if (nameBuf == "LIST") { 
-        nameBuf = "I will list how the music files now:";
-    } else {
-        nameBuf = "Unknown command";
+        nameBuf = "Here is a list of the available music:\n";
+        listFiles(currentDirectoryPath,fileList);
+        std::string messageToClient = fileList;
+        // Send the list of files to the client
+        if (send(clientSock, messageToClient.c_str(), messageToClient.size(), 0) != messageToClient.size()) {
+            fatal_error("Send failed");
+        }
+    }
+    else if ((nameBuf == "DIFF")) {
+        nameBuf = "Here are the files the server has and you do not:";
+    }
+    else if (nameBuf == "PULL"){
+        nameBuf = "Retrieving Files";
+    }
+    else if (nameBuf == "LEAVE"){
+        nameBuf = "Closing Connection";
+    }
+     else {
+        nameBuf = "Unknown command please retry";
     }
 }
 
@@ -46,17 +70,22 @@ int main(int argc, char *argv[]) {
     unsigned short changeServPort = 9090; // Server port (defined as 9090)
     unsigned int clntLen;          // Length of address data struct
 
-    std::string nameBuf(BUFSIZE, 0);   // Buffer to store name from client
-    unsigned char md_value[EVP_MAX_MD_SIZE];  // Buffer to store change result
-    EVP_MD_CTX *mdctx;              // Digest data structure declaration
-    const EVP_MD *md;               // Digest data structure declaration
-    int md_len;                     // Digest data structure size tracking
+    std::string fileList = "";
+    std::string nameBuf;   // Buffer to store name from client
+    std::string currentDirectoryPath;
+    char cwd[PATH_MAX];    // Store current path
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        currentDirectoryPath = std::string(cwd);
+        std::cout << "Current directory: " << currentDirectoryPath << std::endl;
+    } else {
+        perror("getcwd() error");
+    }
 
     // Create new TCP Socket for incoming requests
     if ((serverSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
         fatal_error("Socket Failed");
     }
-
+    
     // Construct local address structure
     memset(&changeServAddr, 0, sizeof(changeServAddr));
     changeServAddr.sin_family = AF_INET;
@@ -80,14 +109,17 @@ int main(int argc, char *argv[]) {
         if ((clientSock = accept(serverSock, (struct sockaddr *) &changeClntAddr, &clntLen)) < 0) {
             fatal_error("accept() failed");
         }
+        std::string nameBuf(BUFSIZE, '\0');
         // Extract Your Name from the packet, store in nameBuf
         int recvLen = recv(clientSock, &nameBuf[0], BUFSIZE - 1, 0);
         if (recvLen < 0) {
             fatal_error("recv() failed");
         }
 
+        nameBuf.resize(recvLen);  // Resize the string to fit the actual data received
+
         nameBuf[recvLen] = '\0';  // Null-terminate the received string
-        executeCommand(nameBuf); // Execute user specified action
+        executeCommand(nameBuf,currentDirectoryPath,fileList,clientSock); // Execute user specified action
         std::cout << "execution done" << std::endl;
 
         // Send the same nameBuf string back to the client

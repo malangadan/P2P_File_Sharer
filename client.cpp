@@ -64,13 +64,21 @@ int main(int argc, char *argv[]) {
     }
 
     // Receive the message back from the server
-    int returnBytes = recv(clientSock, rcvBuf, RCVBUFSIZE - 1, 0);
-    if (returnBytes < 0) {
-        fatal_error("recv() returned less than 0 bytes");
+    int returnBytes = 0;      // Initialize number of received bytes
+    std::string serverResponse; // String to store the server response
+
+    // Continue receiving until no more data is available
+    while ((returnBytes = recv(clientSock, rcvBuf, RCVBUFSIZE - 1, 0)) > 0) {
+        rcvBuf[returnBytes] = '\0';    // Null-terminate the received chunk
+        serverResponse += std::string(rcvBuf);  // Append received data to the response string
     }
 
-    // Print the received message from the server
-    std::cout << "Message received from server: " << std::string(rcvBuf, returnBytes) << std::endl;
+    if (returnBytes < 0) {
+        fatal_error("recv() returned an error");
+    }
+
+    // Print the received message from the server (list of files)
+    std::cout << serverResponse << std::endl;
 
     // Close the client socket after the interaction
     close(clientSock);
