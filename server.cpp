@@ -17,6 +17,7 @@
 #include <filesystem>
 #include <fstream> 
 #include <vector>
+#include <ctime>
 
 namespace fs = std::filesystem;
 
@@ -35,6 +36,11 @@ namespace fs = std::filesystem;
 struct File{
     std::string fileName;
     std::string hash;
+};
+
+struct ClientData {
+    int clientSock;
+    std::string clientIdentifier;
 };
 
 enum RequestType {
@@ -61,6 +67,33 @@ RequestType encodeType(uint8_t type) {
     }
 }
 
+std::string getCurrentTime() {
+    time_t now = time(0);
+    char* dt = ctime(&now);  // Converts time to a string
+    std::string timestamp(dt);
+    timestamp.pop_back();  // Remove the newline character added by ctime
+    return timestamp;
+}
+
+// Function to log client interactions
+void logClientData(const std::string& clientIdentifier, const std::string& message) {
+    // Define the log file based on the clientIdentifier (IP + port)
+    std::string logFileName = "client_" + clientIdentifier + ".log";
+
+    // Open the log file in append mode
+    std::ofstream logFile(logFileName, std::ios::app);
+
+    if (!logFile.is_open()) {
+        std::cerr << "Error opening log file: " << logFileName << std::endl;
+        return;
+    }
+
+    // Write the log entry with a timestamp
+    logFile << "[" << getCurrentTime() << "] " << message << std::endl;
+
+    // Close the log file
+    logFile.close();
+}
 
 void fatal_error(const std::string& message) {
     perror(message.c_str());
@@ -317,8 +350,12 @@ int &clientSock, std::vector<File> &fileNameHash) {
 
 // Thread function for handling client connections
 void *handleClient(void *arg) {
-    int clientSock = *((int*)arg);
-    free(arg);
+    ClientData *clientData = (ClientData*)arg;  // Cast the argument to ClientData pointer
+    int clientSock = clientData->clientSock;
+    std::string clientIdentifier = clientData->clientIdentifier;
+
+    delete clientData;  // Free the allocated memory for ClientData
+
     std::vector<uint8_t> recvBuffer(RCVBUFSIZE);
     std::vector<uint8_t> sendBuffer(SNDBUFSIZE);
     std::vector<File> fileNameHash;
@@ -334,20 +371,26 @@ void *handleClient(void *arg) {
         int recvMsg = recv(clientSock, recvBuffer.data(), RCVBUFSIZE, 0);
         if (recvMsg < 0) {
             perror("recv() failed");
+            logClientData(clientIdentifier, "Error receiving data.");
         } else if (recvMsg == 0) {
             std::cout << "Client closed connection" << std::endl;
+            logClientData(clientIdentifier, "Client disconnected.");
             close(clientSock);
             pthread_exit(NULL);
         }
 
         uint8_t reqType = recvBuffer[0];
         RequestType reqTypeEncoded = encodeType(reqType);
-        executeCommand(reqTypeEncoded, sendBuffer, currentDirectoryPath,clientSock, fileNameHash);
 
+        // Log the request type received
+        logClientData(clientIdentifier, "Received request type: " + std::to_string(reqType));
+
+        executeCommand(reqTypeEncoded, sendBuffer, currentDirectoryPath, clientSock, fileNameHash);
     }
 
     return NULL;
 }
+
 
 int main(int argc, char *argv[]) {
     int serverSock;
@@ -375,18 +418,36 @@ int main(int argc, char *argv[]) {
 
     while (true) {
         clntLen = sizeof(changeClntAddr);
-        int *clientSock = (int*)malloc(sizeof(int));  // Allocate memory for clientSock
-        if ((*clientSock = accept(serverSock, (struct sockaddr *) &changeClntAddr, &clntLen)) < 0) {
+        int clientSock = accept(serverSock, (struct sockaddr *) &changeClntAddr, &clntLen);
+        if (clientSock < 0) {
             fatal_error("accept() failed");
         }
 
+        // Get client IP and port
+        char clientIP[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(changeClntAddr.sin_addr), clientIP, INET_ADDRSTRLEN);
+        int clientPort = ntohs(changeClntAddr.sin_port);
+
+        // Create a unique identifier for the client (IP + port)
+        std::string clientIdentifier = std::string(clientIP) + "_" + std::to_string(clientPort);
+
+        // Create a ClientData struct and populate it
+        ClientData *clientData = new ClientData;
+        clientData->clientSock = clientSock;
+        clientData->clientIdentifier = clientIdentifier;
+
+        // Log the connection
+        logClientData(clientIdentifier, "Client connected.");
+
+        // Create a thread to handle the client
         pthread_t threadID;
-        if (pthread_create(&threadID, NULL, handleClient, (void*)clientSock) != 0) {
+        if (pthread_create(&threadID, NULL, handleClient, (void*)clientData) != 0) {
             fatal_error("pthread_create() failed");
         }
 
-        pthread_detach(threadID);  // Ensure resources are released when the thread finishes
+        pthread_detach(threadID);  // Release thread
     }
 
     return 0;
 }
+
