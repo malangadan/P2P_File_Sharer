@@ -183,10 +183,6 @@ void listFiles(std::vector<std::string> &fileList, const std::string &currentDir
 }
 
 std::vector<std::string> getHashList(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock) {
-    
-    // Send message (inform the client what type of request is being made)
-    send(clientSock, sendBuff.data(), sendBuff.size(), 0);
-    
     // Receive the length of the hash list from the client (first, receive the total length of the hash list)
     int hashListLength = 0;
     if (recv(clientSock, &hashListLength, sizeof(hashListLength), 0) < 0) {
@@ -248,7 +244,6 @@ int &clientSock, std::vector<File> &fileNameHash) {
             if (send(clientSock, fname.c_str(), fnameLength, 0) < 0) {
                 fatal_error("List Error (fname): ");
             }
-            std::cout << "fname content" << std::endl;
             std::cout << fname << std::endl;
         }
 
@@ -309,9 +304,9 @@ int &clientSock, std::vector<File> &fileNameHash) {
             }
         }
     }
-    // else if (nameBuf == "PULL"){
-    //     nameBuf = "Retrieving Files";
-    // }
+    else if (type == PULL){
+        std::cout << "pull" << std::endl;
+    }
     // else if (nameBuf == "LEAVE"){
     //     nameBuf = "Closing Connection";
     // }
@@ -372,25 +367,30 @@ int main(int argc, char *argv[]) {
         if ((clientSock = accept(serverSock, (struct sockaddr *) &changeClntAddr, &clntLen)) < 0) {
             fatal_error("accept() failed");
         }
+        while (true){
+            // Recieve Request
+            int recvMsg = recv(clientSock, recvBuffer.data(), RCVBUFSIZE, 0);
+            if (recvMsg < 0) {
+                perror("recv() failed");
+            } else if (recvMsg == 0) {
+                std::cout << "Client closed connection" << std::endl;
+                close(clientSock);  // Close socket on client disconnect
+            } else {
+                std::cout << "Received " << recvMsg << " bytes" << std::endl;
+            }
+            std::cout << "Received message, size: " << recvMsg << std::endl;
+            // Decode File
+            uint8_t reqType = recvBuffer[0];
+            // std::cout << static_cast<unsigned>(reqType) << std::endl;
+            std::cout << "Request type received: " << static_cast<int>(reqType) << std::endl;
 
-        // Recieve Request
-        int recvMsg = recv(clientSock, recvBuffer.data(), RCVBUFSIZE, 0);
-        if(recvMsg < 0) {
-            fatal_error("recv() failed");
+            RequestType reqTypeEncoded = encodeType(reqType);
+            // std::cout << reqTypeEncoded << std::endl;
+
+            // Execute Command
+            executeCommand(reqTypeEncoded, sendBuffer, currentDirectoryPath, fileList, clientSock,fileNameHash); // Execute user specified action
+            std::cout << "execution done" << std::endl;
         }
-        std::cout << "Received message, size: " << recvMsg << std::endl;
-        // Decode File
-        uint8_t reqType = recvBuffer[0];
-        // std::cout << static_cast<unsigned>(reqType) << std::endl;
-        std::cout << "Request type received: " << static_cast<int>(reqType) << std::endl;
-        
-        RequestType reqTypeEncoded = encodeType(reqType);
-        // std::cout << reqTypeEncoded << std::endl;
-
-
-        // Execute Command
-        executeCommand(reqTypeEncoded, sendBuffer, currentDirectoryPath, fileList, clientSock,fileNameHash); // Execute user specified action
-        std::cout << "execution done" << std::endl;
     }
 
     return 0;
