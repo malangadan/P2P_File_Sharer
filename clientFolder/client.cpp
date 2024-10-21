@@ -161,7 +161,12 @@ MessageRequest createMessage(RequestType type) {
 }
 
 std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock) {
-    
+    // Print the contents if sendBuff is string-based (e.g., vector<char>)
+    std::cout << "sendBuff sent: ";
+    for (const auto& byte : sendBuff) {
+        std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+    }
+    std::cout << std::endl;
     // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
     // Check for response from server
@@ -206,7 +211,12 @@ std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uin
 std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock, std::vector<std::string> &hashList) {
     // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
-
+    // Print the contents if sendBuff is string-based (e.g., vector<char>)
+    std::cout << "sendBuff sent: ";
+    for (const auto& byte : sendBuff) {
+        std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+    }
+    std::cout << std::endl;
     // Send hashList
     int length = hashList.size();
     if (send(clientSock, &length, sizeof(length), 0) < 0) {
@@ -340,8 +350,17 @@ int main(int argc, char *argv[]) {
                 break;
 
             case 3:
-                // Placeholder for future functionality
-                std::cout << "PULL functionality not implemented yet." << std::endl;
+                req = createMessage(PULL);
+                std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+                // Load send buffer
+                sendBuff[0] = req.type;
+                send(clientSock, sendBuff.data(), sendBuff.size(), 0);
+                // Print the contents if sendBuff is string-based (e.g., vector<char>)
+                std::cout << "sendBuff sent: ";
+                for (const auto& byte : sendBuff) {
+                    std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+                }
+                std::cout << std::endl;
                 break;
 
             case 4:

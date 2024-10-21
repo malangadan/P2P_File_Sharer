@@ -15,6 +15,7 @@
 #include <string>          // For std::string
 #include <algorithm>
 #include <filesystem>
+#include <unordered_set>
 namespace fs = std::filesystem;
 
 #define RCVBUFSIZE 512     // The receive buffer size
@@ -22,15 +23,80 @@ namespace fs = std::filesystem;
 #define BUFSIZE 40         // Your name can be as many as 40 chars
 #define MAXPENDING 10
 
+
+// Function to compute the hashes of all files in a directory and append them to a given string
+void compute_hashes_in_directory(const std::string &directoryPath, std::string &hashes) {
+    // Iterate over all files in directory
+    for (const auto &entry : fs::directory_iterator(directoryPath)) {
+        if (fs::is_regular_file(entry.path())) {
+            std::string filePath = entry.path().string();
+            unsigned char hash[EVP_MAX_MD_SIZE];  // Buffer to store the hash
+            unsigned int length = 0;
+
+            // Initialize the OpenSSL for SHA-256
+            EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+            if (mdctx == NULL) {
+                std::cerr << "Error: Failed to create EVP_MD_CTX" << std::endl;
+                continue;
+            }
+
+            // Initialize SHA-256
+            if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) {
+                std::cerr << "Error: Failed to initialize SHA-256" << std::endl;
+                EVP_MD_CTX_free(mdctx);
+                continue;
+            }
+
+            // Open the file for reading
+            std::ifstream file(filePath, std::ifstream::binary);
+            if (!file.is_open()) {
+                std::cerr << "Error: Could not open file " << filePath << std::endl;
+                EVP_MD_CTX_free(mdctx);
+                continue;
+            }
+
+            // Read the file and update the hash context
+            char buffer[1024];
+            while (file.read(buffer, sizeof(buffer))) {
+                if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
+                    std::cerr << "Error: Failed to update SHA-256 hash" << std::endl;
+                    EVP_MD_CTX_free(mdctx);
+                    continue;
+                }
+            }
+
+            // Finalize the SHA-256 digest
+            if (EVP_DigestFinal_ex(mdctx, hash, &length) != 1) {
+                std::cerr << "Error: Failed to finalize SHA-256 hash" << std::endl;
+                EVP_MD_CTX_free(mdctx);
+                continue;
+            }
+
+            EVP_MD_CTX_free(mdctx);
+
+            // Convert the hash to a hexadecimal string and append it to the hashes string
+            std::string hexHash;
+            for (unsigned int i = 0; i < length; i++) {
+                char hex[3];
+                snprintf(hex, sizeof(hex), "%02x", hash[i]);
+                hexHash.append(hex);
+            }
+
+            // Append the computed hash followed by a newline
+            hashes += hexHash + "\n";
+        }
+    }
+}
+
 void fatal_error(const std::string& message) {
     perror(message.c_str());
     exit(1);
 }
 
-void listFiles(const std::string &currentDirectoryPath, std::string &fileList){
-    for (const auto &entry : fs::directory_iterator(currentDirectoryPath)) {
-        fileList += entry.path().filename().string() + "\n";  // Add each file name to the string
-    }
+// Function to list files in a directory and add them to fileList and the unordered_set
+void listFiles(const std::string &currentDirectoryPath, std::string &fileList) {
+    compute_hashes_in_directory(currentDirectoryPath,fileList);
+    std::cout << fileList << std::endl;
 }
 
 
@@ -44,9 +110,9 @@ int &clientSock) {
         listFiles(currentDirectoryPath,fileList);
         std::string messageToClient = fileList;
         // Send the list of files to the client
-        if (send(clientSock, messageToClient.c_str(), messageToClient.size(), 0) != messageToClient.size()) {
-            fatal_error("Send failed");
-        }
+        // if (send(clientSock, messageToClient.c_str(), messageToClient.size(), 0) != messageToClient.size()) {
+        //     fatal_error("Send failed");
+        // }
     }
     else if ((nameBuf == "DIFF")) {
         nameBuf = "Here are the files the server has and you do not:";

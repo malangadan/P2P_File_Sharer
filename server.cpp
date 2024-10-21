@@ -215,7 +215,7 @@ std::vector<std::string> getHashList(std::vector<uint8_t> &sendBuff, std::vector
     return hashList;
 }
 
-void executeCommand(RequestType &type, std::vector<uint8_t> &sendBuff, const std::string &currentDirectoryPath,std::string &fileList,
+void executeCommand(RequestType &type, std::vector<uint8_t> &sendBuff, const std::string &currentDirectoryPath,
 int &clientSock, std::vector<File> &fileNameHash) {
     std::cout << type << std::endl;
     if (type == LIST) { 
@@ -315,82 +315,77 @@ int &clientSock, std::vector<File> &fileNameHash) {
     // }
 }
 
-int main(int argc, char *argv[]) {
-    int serverSock;                // Server Socket
-    int clientSock;                // Client Socket
-    struct sockaddr_in changeServAddr; // Local address
-    struct sockaddr_in changeClntAddr; // Client address
-    unsigned short changeServPort = 9090; // Server port (defined as 9090)
-    unsigned int clntLen;          // Length of address data struct
-    std::vector<File> fileNameHash;
-    // DEFINE BUFFERS
+// Thread function for handling client connections
+void *handleClient(void *arg) {
+    int clientSock = *((int*)arg);
+    free(arg);
     std::vector<uint8_t> recvBuffer(RCVBUFSIZE);
-    std::vector<uint8_t> sendBuffer(RCVBUFSIZE);
-
-    std::string fileList = "";
-    std::string res;   // Buffer to store name from client
+    std::vector<uint8_t> sendBuffer(SNDBUFSIZE);
+    std::vector<File> fileNameHash;
     std::string currentDirectoryPath;
-    char cwd[PATH_MAX];    // Store current path
+    char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         currentDirectoryPath = std::string(cwd);
-        std::cout << "Current directory: " << currentDirectoryPath << std::endl;
     } else {
         perror("getcwd() error");
     }
 
-    // Create new TCP Socket for incoming requests
+    while (true) {
+        int recvMsg = recv(clientSock, recvBuffer.data(), RCVBUFSIZE, 0);
+        if (recvMsg < 0) {
+            perror("recv() failed");
+        } else if (recvMsg == 0) {
+            std::cout << "Client closed connection" << std::endl;
+            close(clientSock);
+            pthread_exit(NULL);
+        }
+
+        uint8_t reqType = recvBuffer[0];
+        RequestType reqTypeEncoded = encodeType(reqType);
+        executeCommand(reqTypeEncoded, sendBuffer, currentDirectoryPath,clientSock, fileNameHash);
+
+    }
+
+    return NULL;
+}
+
+int main(int argc, char *argv[]) {
+    int serverSock;
+    struct sockaddr_in changeServAddr;
+    struct sockaddr_in changeClntAddr;
+    unsigned short changeServPort = 9090;
+    unsigned int clntLen;
+
     if ((serverSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
         fatal_error("Socket Failed");
     }
-    
-    // Construct local address structure
+
     memset(&changeServAddr, 0, sizeof(changeServAddr));
     changeServAddr.sin_family = AF_INET;
     changeServAddr.sin_addr.s_addr = htonl(INADDR_ANY);
     changeServAddr.sin_port = htons(changeServPort);
 
-    // Bind to local address structure
     if (bind(serverSock, (struct sockaddr *) &changeServAddr, sizeof(changeServAddr)) < 0) {
         fatal_error("bind() failed");
     }
 
-    // Listen for incoming connections
     if (listen(serverSock, MAXPENDING) < 0) {
         fatal_error("listen() failed");
     }
 
-
-    // Loop server forever
     while (true) {
         clntLen = sizeof(changeClntAddr);
-        // Accept incoming connection
-        if ((clientSock = accept(serverSock, (struct sockaddr *) &changeClntAddr, &clntLen)) < 0) {
+        int *clientSock = (int*)malloc(sizeof(int));  // Allocate memory for clientSock
+        if ((*clientSock = accept(serverSock, (struct sockaddr *) &changeClntAddr, &clntLen)) < 0) {
             fatal_error("accept() failed");
         }
-        while (true){
-            // Recieve Request
-            int recvMsg = recv(clientSock, recvBuffer.data(), RCVBUFSIZE, 0);
-            if (recvMsg < 0) {
-                perror("recv() failed");
-            } else if (recvMsg == 0) {
-                std::cout << "Client closed connection" << std::endl;
-                close(clientSock);  // Close socket on client disconnect
-            } else {
-                std::cout << "Received " << recvMsg << " bytes" << std::endl;
-            }
-            std::cout << "Received message, size: " << recvMsg << std::endl;
-            // Decode File
-            uint8_t reqType = recvBuffer[0];
-            // std::cout << static_cast<unsigned>(reqType) << std::endl;
-            std::cout << "Request type received: " << static_cast<int>(reqType) << std::endl;
 
-            RequestType reqTypeEncoded = encodeType(reqType);
-            // std::cout << reqTypeEncoded << std::endl;
-
-            // Execute Command
-            executeCommand(reqTypeEncoded, sendBuffer, currentDirectoryPath, fileList, clientSock,fileNameHash); // Execute user specified action
-            std::cout << "execution done" << std::endl;
+        pthread_t threadID;
+        if (pthread_create(&threadID, NULL, handleClient, (void*)clientSock) != 0) {
+            fatal_error("pthread_create() failed");
         }
+
+        pthread_detach(threadID);  // Ensure resources are released when the thread finishes
     }
 
     return 0;
