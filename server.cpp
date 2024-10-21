@@ -117,13 +117,29 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<F
                 continue;
             }
 
-            // Read the file and update the hash context
-            char buffer[1024];
-            while (file.read(buffer, sizeof(buffer))) {
-                if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
-                    std::cerr << "Error: Failed to update SHA-256 hash" << std::endl;
+            // Get the file size to decide whether it's small or large
+            file.seekg(0, std::ifstream::end);
+            std::streamsize fileSize = file.tellg();
+            file.seekg(0, std::ifstream::beg); // Reset file pointer to the beginning
+
+            if (fileSize <= 1024) {
+                // For files <= 1 KB, read the whole file at once
+                char buffer[fileSize];
+                file.read(buffer, fileSize);
+                if (EVP_DigestUpdate(mdctx, buffer, fileSize) != 1) {
+                    std::cerr << "Error: Failed to update SHA-256 hash for small file" << std::endl;
                     EVP_MD_CTX_free(mdctx);
                     continue;
+                }
+            } else {
+                // For larger files, process in chunks (1024 bytes)
+                char buffer[1024];
+                while (file.read(buffer, sizeof(buffer))) {
+                    if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
+                        std::cerr << "Error: Failed to update SHA-256 hash for large file" << std::endl;
+                        EVP_MD_CTX_free(mdctx);
+                        continue;
+                    }
                 }
             }
 
@@ -136,19 +152,24 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<F
 
             EVP_MD_CTX_free(mdctx);
 
-            // Convert the hash to a hexadecimal string and append it to the hashes string
+            // Convert the hash to a hexadecimal string
             std::string hexHash;
             for (unsigned int i = 0; i < length; i++) {
                 char hex[3];
                 snprintf(hex, sizeof(hex), "%02x", hash[i]);
                 hexHash.append(hex);
             }
-        File fileObj;  
-        fileObj.fileName = entry.path().filename().string();
-        std::cout << fileObj.fileName << std::endl;
-        fileObj.hash = hexHash;
-        std::cout << fileObj.hash << std::endl;
-        fileNameHash.push_back(fileObj);
+
+            // Create a File object and add it to the vector
+            File fileObj;
+            fileObj.fileName = entry.path().filename().string();
+            fileObj.hash = hexHash;
+
+            // Debug prints for file name and hash
+            std::cout << "File: " << fileObj.fileName << std::endl;
+            std::cout << "Hash: " << fileObj.hash << std::endl;
+
+            fileNameHash.push_back(fileObj);
         }
     }
 }
@@ -227,6 +248,8 @@ int &clientSock, std::vector<File> &fileNameHash) {
             if (send(clientSock, fname.c_str(), fnameLength, 0) < 0) {
                 fatal_error("List Error (fname): ");
             }
+            std::cout << "fname content" << std::endl;
+            std::cout << fname << std::endl;
         }
 
     }

@@ -74,7 +74,7 @@ uint8_t decodeType(RequestType type) {
 
 // Function to compute the hashes of all files in a directory and append them to a given string
 void compute_hashes_in_directory(const std::string &directoryPath, std::vector<std::string> &hashList) {
-    // Iterate over all files in directory
+// Iterate over all files in directory
     for (const auto &entry : fs::directory_iterator(directoryPath)) {
         if (fs::is_regular_file(entry.path())) {
             std::string filePath = entry.path().string();
@@ -103,13 +103,29 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
                 continue;
             }
 
-            // Read the file and update the hash context
-            char buffer[1024];
-            while (file.read(buffer, sizeof(buffer))) {
-                if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
-                    std::cerr << "Error: Failed to update SHA-256 hash" << std::endl;
+            // Get the file size to decide whether it's small or large
+            file.seekg(0, std::ifstream::end);
+            std::streamsize fileSize = file.tellg();
+            file.seekg(0, std::ifstream::beg); // Reset file pointer to the beginning
+
+            if (fileSize <= 1024) {
+                // For files <= 1 KB, read the whole file at once
+                char buffer[fileSize];
+                file.read(buffer, fileSize);
+                if (EVP_DigestUpdate(mdctx, buffer, fileSize) != 1) {
+                    std::cerr << "Error: Failed to update SHA-256 hash for small file" << std::endl;
                     EVP_MD_CTX_free(mdctx);
                     continue;
+                }
+            } else {
+                // For larger files, process in chunks (1024 bytes)
+                char buffer[1024];
+                while (file.read(buffer, sizeof(buffer))) {
+                    if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
+                        std::cerr << "Error: Failed to update SHA-256 hash for large file" << std::endl;
+                        EVP_MD_CTX_free(mdctx);
+                        continue;
+                    }
                 }
             }
 
@@ -122,7 +138,7 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
 
             EVP_MD_CTX_free(mdctx);
 
-            // Convert the hash to a hexadecimal string and append it to the hashes string
+            // Convert the hash to a hexadecimal string
             std::string hexHash;
             for (unsigned int i = 0; i < length; i++) {
                 char hex[3];
@@ -130,7 +146,7 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
                 hexHash.append(hex);
             }
 
-            // Append the computed hash followed by a newline
+            // Append the computed hash to the list
             hashList.push_back(hexHash);
         }
     }
@@ -139,7 +155,6 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
 MessageRequest createMessage(RequestType type) {
     // Decode type
     uint8_t reqType = decodeType(type);
-    
     MessageRequest req;
     req.type = reqType;
     return req;
@@ -204,7 +219,7 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
         if (send(clientSock, &hashLength, sizeof(hashLength), 0) < 0) {
             fatal_error("List Error (hashLength): ");
         }
-
+        std::cout << hash << std::endl;
         if (send(clientSock, hash.c_str(), hashLength, 0) < 0) {
             fatal_error("List Error (hash): ");
         }
@@ -243,10 +258,6 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
 }
 
 
-
-
-
-/* The main function */
 int main(int argc, char *argv[]) {
 
     // Get path into string
@@ -284,25 +295,14 @@ int main(int argc, char *argv[]) {
         fatal_error("Connection to server failed");
     }
 
-    // Send the student's name to the server
-    // int msglen = studentName.length();
-    // if (send(clientSock, studentName.c_str(), msglen, 0) != msglen) {
-    //     fatal_error("send() sent an unexpected number of bytes");
-    // }
-
-    // Receive the message back from the server
-    int returnBytes = 0;      // Initialize number of received bytes
-    std::string serverResponse; // String to store the server response
-
+    // Main client loop
     while (true) {
         int option;
         MessageRequest req;
         std::string res;
         std::vector<std::string> fileList;
 
-        // uint32_t length = htonl(req.requestType.size());
-        
-        msg_display(option);
+        msg_display(option); // Prompt for the user option
 
         switch(option) {
             case 1:
@@ -312,13 +312,16 @@ int main(int argc, char *argv[]) {
                 // Load send buffer
                 sendBuff[0] = req.type;
 
+                // Send request and receive the file list
                 fileList = getList(sendBuff, recvBuff, clientSock);
 
+                // Display the file list
                 for (auto& file : fileList) {
                     std::cout << file << std::endl;
                 }
                 std::cout << std::endl;
                 break;
+
             case 2:
                 req = createMessage(DIFF);
                 std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
@@ -326,39 +329,37 @@ int main(int argc, char *argv[]) {
                 // Load send buffer
                 sendBuff[0] = req.type;
 
-                fileList = getDiff(sendBuff, recvBuff, clientSock,hashList);
+                // Send request and receive the differences
+                fileList = getDiff(sendBuff, recvBuff, clientSock, hashList);
 
+                // Display the differences
                 for (auto& file : fileList) {
                     std::cout << file << std::endl;
                 }
                 std::cout << std::endl;
                 break;
+
             case 3:
-                // req = createMessage("PULL");
-                // std::cout << req.requestType << std::endl;
-                // send(clientSock, &req, sizeof(req), 0);
+                // Placeholder for future functionality
+                std::cout << "PULL functionality not implemented yet." << std::endl;
                 break;
+
             case 4:
-                // req = createMessage("LEAVE");
-                // std::cout << req.requestType << std::endl;
-                // send(clientSock, &req, sizeof(req), 0);
-                break;
+                // Send LEAVE message to server
+                req = createMessage(LEAVE);
+                sendBuff[0] = req.type;
+                send(clientSock, sendBuff.data(), sendBuff.size(), 0);
+                std::cout << "Leaving..." << std::endl;
+
+                // Break out of the loop and close the client
+                close(clientSock);
+                return 0;
+
             default:
-                std::cout << "Invalid option. Selection a message between" << std::endl;
+                std::cout << "Invalid option. Please select a valid option." << std::endl;
                 continue;
         }
-
-
     }
 
-    if (returnBytes < 0) {
-        fatal_error("recv() returned an error");
-    }
-
-    // Print the received message from the server (list of files)
-    std::cout << serverResponse << std::endl;
-
-    // Close the client socket after the interaction
-    close(clientSock);
     return 0;
 }
