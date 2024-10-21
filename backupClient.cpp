@@ -7,13 +7,19 @@
 *
 *////////////////////////////////////////////////////////////
 
-#include <iostream>            // For C++ I/O
-#include <sys/socket.h>        // For socket(), connect(), send(), and recv()
-#include <arpa/inet.h>         // For sockaddr_in and inet_addr()
-#include <cstdlib>             // For general-purpose functions like exit()
-#include <unistd.h>            // For close()
-#include <cstring>             // For C-style string manipulation (memset)
+#include <iostream>        // For input/output in C++
+#include <sys/socket.h>    // For socket(), connect(), send(), and recv()
+#include <arpa/inet.h>     // For sockaddr_in and inet_addr()
+#include <cstdlib>         // For general-purpose functions like exit()
+#include <unistd.h>        // For close()
+#include <cstring>         // For string manipulation functions
+#include <openssl/evp.h>   // For OpenSSL EVP digest libraries/SHA256
+#include <string>          // For std::string
+#include <algorithm>
+#include <fstream> 
+#include <filesystem>
 #include <vector>
+namespace fs = std::filesystem;
 
 /* Constants */
 #define RCVBUFSIZE 512         // The receive buffer size
@@ -47,6 +53,69 @@ MessageRequest createMessage(const std::string &type) {
     return req;
 }
 
+// Function to compute the hashes of all files in a directory and append them to a given string
+void compute_hashes_in_directory(const std::string &directoryPath, std::string &hashes) {
+    // Iterate over all files in directory
+    for (const auto &entry : fs::directory_iterator(directoryPath)) {
+        if (fs::is_regular_file(entry.path())) {
+            std::string filePath = entry.path().string();
+            unsigned char hash[EVP_MAX_MD_SIZE];  // Buffer to store the hash
+            unsigned int length = 0;
+
+            // Initialize the OpenSSL for SHA-256
+            EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+            if (mdctx == NULL) {
+                std::cerr << "Error: Failed to create EVP_MD_CTX" << std::endl;
+                continue;
+            }
+
+            // Initialize SHA-256
+            if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) {
+                std::cerr << "Error: Failed to initialize SHA-256" << std::endl;
+                EVP_MD_CTX_free(mdctx);
+                continue;
+            }
+
+            // Open the file for reading
+            std::ifstream file(filePath, std::ifstream::binary);
+            if (!file.is_open()) {
+                std::cerr << "Error: Could not open file " << filePath << std::endl;
+                EVP_MD_CTX_free(mdctx);
+                continue;
+            }
+
+            // Read the file and update the hash context
+            char buffer[1024];
+            while (file.read(buffer, sizeof(buffer))) {
+                if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
+                    std::cerr << "Error: Failed to update SHA-256 hash" << std::endl;
+                    EVP_MD_CTX_free(mdctx);
+                    continue;
+                }
+            }
+
+            // Finalize the SHA-256 digest
+            if (EVP_DigestFinal_ex(mdctx, hash, &length) != 1) {
+                std::cerr << "Error: Failed to finalize SHA-256 hash" << std::endl;
+                EVP_MD_CTX_free(mdctx);
+                continue;
+            }
+
+            EVP_MD_CTX_free(mdctx);
+
+            // Convert the hash to a hexadecimal string and append it to the hashes string
+            std::string hexHash;
+            for (unsigned int i = 0; i < length; i++) {
+                char hex[3];
+                snprintf(hex, sizeof(hex), "%02x", hash[i]);
+                hexHash.append(hex);
+            }
+
+            // Append the computed hash followed by a newline
+            hashes += hexHash + "\n";
+        }
+    }
+}
 
 /* The main function */
 int main(int argc, char *argv[]) {
@@ -54,12 +123,21 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serv_addr;   // The server address
 
     std::string studentName;        // Your Name
-
+    std::string hashList;
     char rcvBuf[RCVBUFSIZE];        // Receive Buffer
     
-
-    // studentName = argv[1];          // Assign student's name from command line
     memset(rcvBuf, 0, RCVBUFSIZE);  // Clear receive buffer
+
+    std::string currentDirectoryPath;
+    char cwd[PATH_MAX];    // Store current path
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        currentDirectoryPath = std::string(cwd);
+        std::cout << "Current directory: " << currentDirectoryPath << std::endl;
+    } else {
+        perror("getcwd() error");
+    }
+    compute_hashes_in_directory(currentDirectoryPath,hashList);
+    std::cout << "Hashes: " << hashList <<currentDirectoryPath << std::endl;
 
     // Create a new TCP socket
     if ((clientSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {

@@ -2,7 +2,7 @@
 ##
 ## FILE:    Makefile
 ## PROJECT: CNT 4007 Project 1 - Professor Traynor
-## DESCRIPTION: Compile server only
+## DESCRIPTION: Compile client only
 ##
 #################################################################
 
@@ -15,10 +15,10 @@ ifeq ($(OS), SunOS)
     LDFLAGS=-lsocket -lnsl
 endif
 
-all: server 
+all: client 
 
-server: server.cpp
-	$(CC) server.cpp -o server -lcrypto
+client: client.cpp
+	$(CC) client.cpp -o client -lcrypto
 
 clean:
-	rm -f server *.o
+	rm -f client *.o
