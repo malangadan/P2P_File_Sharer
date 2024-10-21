@@ -70,7 +70,7 @@ void fatal_error(const std::string& message) {
 std::vector<std::string> serverDifference(const std::vector<File> &fileNameHash, const std::vector<std::string> &receivedStrings) {
     // Create a vector to store the file names that are present on the server but not on the client
     std::vector<std::string> difference;
-
+    difference.clear();
     // Iterate over all files on the server
     for (const auto &serverFile : fileNameHash) {
         // Check if the server file's hash is in the list of received hashes
@@ -174,7 +174,7 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<F
     }
 }
 
-void listFiles(std::vector<std::string> &fileList, const std::string &currentDirectoryPath,std::vector<File> &fileNameHash){
+void listFiles(std::vector<std::string> &fileList, const std::string &currentDirectoryPath){
     for (const auto &entry : fs::directory_iterator(currentDirectoryPath)) {
         std::string fname = entry.path().filename().string();
         // std::cout << fname << std::endl;
@@ -226,7 +226,7 @@ int &clientSock, std::vector<File> &fileNameHash) {
         std::cout << "Type: LIST" << std::endl;
         
         std::vector<std::string> fileList;
-        listFiles(fileList, currentDirectoryPath,fileNameHash);
+        listFiles(fileList, currentDirectoryPath);
         
         int length = fileList.size();
         std::cout << "fileList Size: " << length << std::endl;
@@ -256,15 +256,14 @@ int &clientSock, std::vector<File> &fileNameHash) {
      else if ((type == DIFF)) {
         std::cout << "Type: DIFF" << std::endl;
         
-        // Step 1: Receive the vector size from the client
         int vectorSize = 0;
         if (recv(clientSock, &vectorSize, sizeof(vectorSize), 0) < 0) {
             fatal_error("Error receiving vector size");
         }
         std::cout << "Received vector size: " << vectorSize << std::endl;
         
-        // Step 2: Receive each string from the client
         std::vector<std::string> receivedStrings;
+        receivedStrings.clear();
         for (int i = 0; i < vectorSize; ++i) {
             int strLength = 0;
             if (recv(clientSock, &strLength, sizeof(strLength), 0) < 0) {
@@ -278,8 +277,8 @@ int &clientSock, std::vector<File> &fileNameHash) {
             buffer[strLength] = '\0';  // Null-terminate the string
             receivedStrings.push_back(std::string(buffer));
         }
+        fileNameHash.clear();
         compute_hashes_in_directory(currentDirectoryPath,fileNameHash);
-
         // Print received strings
         std::cout << "Received strings from client:" << std::endl;
         for (const auto &str : receivedStrings) {
@@ -379,11 +378,12 @@ int main(int argc, char *argv[]) {
         if(recvMsg < 0) {
             fatal_error("recv() failed");
         }
-
+        std::cout << "Received message, size: " << recvMsg << std::endl;
         // Decode File
         uint8_t reqType = recvBuffer[0];
         // std::cout << static_cast<unsigned>(reqType) << std::endl;
-
+        std::cout << "Request type received: " << static_cast<int>(reqType) << std::endl;
+        
         RequestType reqTypeEncoded = encodeType(reqType);
         // std::cout << reqTypeEncoded << std::endl;
 
@@ -391,8 +391,6 @@ int main(int argc, char *argv[]) {
         // Execute Command
         executeCommand(reqTypeEncoded, sendBuffer, currentDirectoryPath, fileList, clientSock,fileNameHash); // Execute user specified action
         std::cout << "execution done" << std::endl;
-
-        close(clientSock);  // Close client connection after handling
     }
 
     return 0;

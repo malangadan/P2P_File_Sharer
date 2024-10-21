@@ -353,6 +353,7 @@ int main(int argc, char *argv[]) {
 
                 // Break out of the loop and close the client
                 close(clientSock);
+                clientSock = -1;
                 return 0;
 
             default:
