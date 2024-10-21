@@ -19,9 +19,16 @@
 #define RCVBUFSIZE 512         // The receive buffer size
 #define SNDBUFSIZE 512         // The send buffer size
 
+enum RequestType {
+    LIST = 1,
+    DIFF = 2,
+    PULL = 3,
+    LEAVE = 4
+};
+
 struct MessageRequest {
     // std::vector<std::string> payLoad;
-    std::string requestType;
+    uint8_t type;
 };
 
 void fatal_error(const std::string& message) {
@@ -35,16 +42,80 @@ void msg_display(int &option) {
     std::cout << "2. List Difference" << std::endl;
     std::cout << "3. Pull Changes" << std::endl;
     std::cout << "4. Leave" << std::endl;
+
     std::cout << std::endl;
     std::cout << "Enter option: " << std::endl;
 
     std::cin >> option;
 }
 
-MessageRequest createMessage(const std::string &type) {
+uint8_t decodeType(RequestType type) {
+    switch(type) {
+        case LIST:
+            return 1;
+        case DIFF:
+            return 2;
+        case PULL:
+            return 3;
+        case LEAVE:
+            return 4;
+        default:
+            std::cout << "Incorrect type" << std::endl;
+            exit(1);
+            break;
+    }
+}
+
+MessageRequest createMessage(RequestType type) {
+    // Decode type
+    uint8_t reqType = decodeType(type);
+    
     MessageRequest req;
-    req.requestType = type;
+    req.type = reqType;
     return req;
+}
+
+std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock) {
+    
+    // Send message
+    send(clientSock, sendBuff.data(), sendBuff.size(), 0);
+    // Check for response from server
+
+    // std::cout << static_cast<unsigned>(recvBuff[0]) << std::endl;
+
+    int fileListLength = 0;
+    if (recv(clientSock, recvBuff.data(), sizeof(fileListLength), 0) < 0) {
+            fatal_error("Error getList (fnameLength): ");
+    }
+
+    fileListLength = static_cast<unsigned>(recvBuff[0]);
+    std::cout << "File List Length: " << fileListLength << std::endl;
+    std::vector<std::string> fileList;
+
+    for(int i = 0; i < fileListLength; i++) {
+
+        // Get file name length
+        int fnameLength = 0;
+        if (recv(clientSock, &fnameLength, sizeof(fnameLength), 0) < 0) {
+            fatal_error("Error getList (fnameLength): ");
+        }
+
+        // DEBUG: fname length
+        // std::cout << "fname length: " << fnameLength << std::endl;
+
+        // Get filestring
+        recvBuff.resize(fnameLength);
+        if (recv(clientSock, recvBuff.data(), fnameLength, 0) < 0) {
+            fatal_error("Error getList (fnameLength): ");
+        }
+
+        // Pushback string
+        fileList.push_back(std::string(recvBuff.begin(), recvBuff.end()));
+
+    }
+
+    return fileList;
+
 }
 
 
@@ -53,13 +124,9 @@ int main(int argc, char *argv[]) {
     int clientSock;                 // Socket descriptor
     struct sockaddr_in serv_addr;   // The server address
 
-    std::string studentName;        // Your Name
-
-    char rcvBuf[RCVBUFSIZE];        // Receive Buffer
-    
-
-    // studentName = argv[1];          // Assign student's name from command line
-    memset(rcvBuf, 0, RCVBUFSIZE);  // Clear receive buffer
+    std::vector<uint8_t> sendBuff(RCVBUFSIZE);  // Send Buffer
+    std::vector<uint8_t> recvBuff(RCVBUFSIZE);  // Recvieve Buffer
+    MessageRequest req;             // Message Requestr
 
     // Create a new TCP socket
     if ((clientSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
@@ -78,10 +145,10 @@ int main(int argc, char *argv[]) {
     }
 
     // Send the student's name to the server
-    int msglen = studentName.length();
-    if (send(clientSock, studentName.c_str(), msglen, 0) != msglen) {
-        fatal_error("send() sent an unexpected number of bytes");
-    }
+    // int msglen = studentName.length();
+    // if (send(clientSock, studentName.c_str(), msglen, 0) != msglen) {
+    //     fatal_error("send() sent an unexpected number of bytes");
+    // }
 
     // Receive the message back from the server
     int returnBytes = 0;      // Initialize number of received bytes
@@ -90,31 +157,55 @@ int main(int argc, char *argv[]) {
     while (true) {
         int option;
         MessageRequest req;
+        std::string res;
+        std::vector<std::string> fileList;
 
+        // uint32_t length = htonl(req.requestType.size());
+        
         msg_display(option);
 
         switch(option) {
             case 1:
-                req = createMessage("LIST");
-                std::cout << req.requestType << std::endl;
-                send(clientSock, &req, sizeof(req), 0);
+                req = createMessage(LIST);
+                std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+
+                // Load send buffer
+                sendBuff[0] = req.type;
+
+                fileList = getList(sendBuff, recvBuff, clientSock);
+
+                for (auto& file : fileList) {
+                    std::cout << file << std::endl;
+                }
+                std::cout << std::endl;
                 break;
             case 2:
-                req = createMessage("DIFF");
-                std::cout << req.requestType << std::endl; 
+                // req = createMessage("DIFF");
+                // std::cout << req.requestType << std::endl; 
+                // send(clientSock, &req, sizeof(req), 0);
+
+                // Check for response from server
+                // if(recv(clientSock, rcvBuf, RCVBUFSIZE - 1, 0) < 0) {
+                //     std::cout << "Not connected" << std::endl;
+                // }
+                // std::cout << res << std::endl;
                 break;
             case 3:
-                req = createMessage("PULL");
-                std::cout << req.requestType << std::endl;
+                // req = createMessage("PULL");
+                // std::cout << req.requestType << std::endl;
+                // send(clientSock, &req, sizeof(req), 0);
                 break;
             case 4:
-                req = createMessage("LEAVE");
-                std::cout << req.requestType << std::endl;
+                // req = createMessage("LEAVE");
+                // std::cout << req.requestType << std::endl;
+                // send(clientSock, &req, sizeof(req), 0);
                 break;
             default:
                 std::cout << "Invalid option. Selection a message between" << std::endl;
                 continue;
         }
+
+
     }
 
     if (returnBytes < 0) {
