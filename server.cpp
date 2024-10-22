@@ -25,13 +25,6 @@ namespace fs = std::filesystem;
 // #define BUFSIZE 40         // Your name can be as many as 40 chars
 #define MAXPENDING 10
 
-
-
-// struct MessageRequest {
-//     // std::vector<std::string> payLoad;
-//     std::string requestType;
-// };
-
 struct File{
     std::string fileName;
     std::string hash;
@@ -42,6 +35,11 @@ enum RequestType {
     DIFF = 2,
     PULL = 3,
     LEAVE = 4
+};
+
+struct MessageRequest {
+    RequestType type;
+    std::vector<uint8_t> payload;
 };
 
 RequestType encodeType(uint8_t type) {
@@ -55,11 +53,13 @@ RequestType encodeType(uint8_t type) {
         case 4:
             return LEAVE;
         default:
-            std::cout << "Incorrect type" << std::endl;
-            exit(1);
+            std::cout << "Incorrect type: " << static_cast<int>(type) << std::endl;
             break;
     }
 }
+
+// Decode Message Request
+
 
 
 void fatal_error(const std::string& message) {
@@ -166,8 +166,8 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<F
             fileObj.hash = hexHash;
 
             // Debug prints for file name and hash
-            std::cout << "File: " << fileObj.fileName << std::endl;
-            std::cout << "Hash: " << fileObj.hash << std::endl;
+            // std::cout << "File: " << fileObj.fileName << std::endl;
+            // std::cout << "Hash: " << fileObj.hash << std::endl;
 
             fileNameHash.push_back(fileObj);
         }
@@ -215,6 +215,46 @@ std::vector<std::string> getHashList(std::vector<uint8_t> &sendBuff, std::vector
     return hashList;
 }
 
+std::vector<uint8_t> copyFileToBuffer(std::string filePath) {
+        
+    // Print file path
+    // std::cout << "File path: " << filePath << std::endl;
+
+    // Get contents and store in buffer
+
+    // Open file
+    std::ifstream file(filePath, std::ifstream::binary);
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open file " << filePath << std::endl;
+    }
+    
+    // Get file length
+    file.seekg(0, std::ifstream::end);
+    std::streamsize fileSize = file.tellg();
+    file.seekg(0, std::ifstream::beg); // Reset file pointer to the beginning
+
+    // std::cout << "File Size: " << fileSize << std::endl;
+
+    std::vector<uint8_t> recvBuffer;
+    std::vector<char> fileBuffer(1024);
+
+    // Read to buffer
+    while (file) {
+        file.read(fileBuffer.data(), fileBuffer.size());
+        std::streamsize bytesRead = file.gcount();
+        std::cout << "bytes read: " << bytesRead << std::endl;
+    
+        // append to end of buffer
+        recvBuffer.insert(recvBuffer.end(), fileBuffer.begin(), fileBuffer.begin() + bytesRead);
+    }
+
+    // std::cout << "Buffer Size: " << recvBuffer.size() << std::endl;
+
+
+    return recvBuffer;
+
+}
+
 void executeCommand(RequestType &type, std::vector<uint8_t> &sendBuff, const std::string &currentDirectoryPath,
 int &clientSock, std::vector<File> &fileNameHash) {
     std::cout << type << std::endl;
@@ -251,6 +291,7 @@ int &clientSock, std::vector<File> &fileNameHash) {
      else if ((type == DIFF)) {
         std::cout << "Type: DIFF" << std::endl;
         
+        // Generate difference
         int vectorSize = 0;
         if (recv(clientSock, &vectorSize, sizeof(vectorSize), 0) < 0) {
             fatal_error("Error receiving vector size");
@@ -306,6 +347,122 @@ int &clientSock, std::vector<File> &fileNameHash) {
     }
     else if (type == PULL){
         std::cout << "pull" << std::endl;
+
+        // Computer Hashes sendt from client
+        int vectorSize = 0;
+        if (recv(clientSock, &vectorSize, sizeof(vectorSize), 0) < 0) {
+            fatal_error("Error receiving vector size");
+        }
+        std::cout << "Received vector size: " << vectorSize << std::endl;
+
+        // Serialize to vec of strings
+        std::vector<std::string> receivedStrings;
+        receivedStrings.clear();
+        for (int i = 0; i < vectorSize; ++i) {
+            int strLength = 0;
+            if (recv(clientSock, &strLength, sizeof(strLength), 0) < 0) {
+                fatal_error("Error receiving string length");
+            }
+
+            char buffer[1024];
+            if (recv(clientSock, buffer, strLength, 0) < 0) {
+                fatal_error("Error receiving string data");
+            }
+            buffer[strLength] = '\0';  // Null-terminate the string
+            receivedStrings.push_back(std::string(buffer));
+        }
+        fileNameHash.clear();
+
+        compute_hashes_in_directory(currentDirectoryPath,fileNameHash);
+        
+        // Print received strings
+        std::cout << "Received strings from client:" << std::endl;
+        for (const auto &str : receivedStrings) {
+            std::cout << str << std::endl;
+        }
+        
+        // Generate Vector for difference
+        std::vector<std::string> difference = serverDifference(fileNameHash,receivedStrings);
+        std::cout << "Difference of strings from client:" << std::endl;
+        for (const auto &str : difference) {
+            std::cout << str << std::endl;
+        }
+        std::cout << std::endl;
+
+        // Get Files and send them
+        
+        // Send number of files
+        int numFiles = difference.size();
+        if (send(clientSock, &numFiles, sizeof(numFiles), 0) < 0) {
+            fatal_error("Error sending number of files (Pull)");
+        }
+
+        
+
+        for (auto& file : difference) {
+            //Get file path
+            std::string fp = currentDirectoryPath + file;
+            std::vector<char> nameBuffer(64);
+            std::vector<uint8_t> buffer;
+
+            // Convert to buffer
+            buffer.clear();
+            buffer = copyFileToBuffer(fp);
+
+            // Print buffer
+            // for (auto& c : buffer) {
+            //     std::cout << c;
+            // }
+            // std::cout<<std::endl;
+
+            // Send file length
+            std::cout << "File name length: " << file.size() << std::endl;
+            int nameLength = file.size();
+            if (send(clientSock, &nameLength, sizeof(nameLength), 0) < 0) {
+                fatal_error("Error sending file size");
+            }
+
+            // Send name of file 
+            // nameBuffer.clear();
+            // nameBuffer.assign(file.begin(), file.end());
+            // nameBuffer.push_back('\0');
+
+            // std::cout << "File name: " << &nameBuffer[0] << std::endl;
+            // if (send(clientSock, nameBuffer.data(), nameBuffer.size(), 0) < 0) {
+            //     fatal_error("Error sending file size");
+            // }
+
+            // Send size of file
+            // int bufferSize = buffer.size();
+            // if (send(clientSock, &bufferSize, sizeof(bufferSize), 0) < 0) {
+            //     fatal_error("Error sending file size");
+            // }
+
+            // Send vector
+
+            // int sendVectorSize = buffer.size();
+            // std::cout << "file buffer size " << sendVectorSize<< std::endl;
+
+            // if (send(clientSock, &sendVectorSize, sizeof(sendVectorSize), 0) < 0) {
+            //     fatal_error("Error sending file size");
+            // }
+
+            // for (const auto &str : difference) {
+            //     int strLength = str.size();
+            //     if (send(clientSock, &strLength, sizeof(strLength), 0) < 0) {
+            //         fatal_error("Error sending string length");
+            //     }
+
+            //     if (send(clientSock, str.c_str(), strLength, 0) < 0) {
+            //         fatal_error("Error sending string data");
+            //     }
+            // }
+        }
+        
+        
+
+        
+
     }
     // else if (nameBuf == "LEAVE"){
     //     nameBuf = "Closing Connection";
@@ -323,9 +480,11 @@ void *handleClient(void *arg) {
     std::vector<uint8_t> sendBuffer(SNDBUFSIZE);
     std::vector<File> fileNameHash;
     std::string currentDirectoryPath;
+    std::string targetDirectoryPath;
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        currentDirectoryPath = std::string(cwd);
+        targetDirectoryPath = "/ServerStore/";
+        currentDirectoryPath = std::string(cwd) + std::string(targetDirectoryPath);
     } else {
         perror("getcwd() error");
     }

@@ -42,7 +42,9 @@ void fatal_error(const std::string& message) {
     exit(1);
 }
 
-void msg_display(int &option) {
+int msg_display() {
+
+    int option = 0;
     std::cout << "Message Options" << std::endl;
     std::cout << "1. List Files" << std::endl;
     std::cout << "2. List Difference" << std::endl;
@@ -53,6 +55,7 @@ void msg_display(int &option) {
     std::cout << "Enter option: " << std::endl;
 
     std::cin >> option;
+    return static_cast<int>(option);
 }
 
 uint8_t decodeType(RequestType type) {
@@ -267,21 +270,98 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
    
 }
 
+// PULL Files
+void getFiles(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock, std::vector<std::string> &hashList) {
+    
+
+    // Send Request
+    send(clientSock, sendBuff.data(), sendBuff.size(), 0);
+
+    // Send hashList
+    int length = hashList.size();
+    if (send(clientSock, &length, sizeof(length), 0) < 0) {
+        fatal_error("List Length Error: ");
+    }
+
+    // Send each hash string
+    for (auto &hash : hashList) {
+        int hashLength = hash.size();
+        if (send(clientSock, &hashLength, sizeof(hashLength), 0) < 0) {
+            fatal_error("List Error (hashLength): ");
+        }
+        std::cout << hash << std::endl;
+        if (send(clientSock, hash.c_str(), hashLength, 0) < 0) {
+            fatal_error("List Error (hash): ");
+        }
+    }
+
+    // Recieve number of files
+    int numFiles = 0;
+    if(recv(clientSock, &numFiles, sizeof(numFiles), 0) < 0) {
+        fatal_error("Pull Error (NUmber of Files)");
+    }
+
+    // Print number of files
+    std::cout << "Number of Files: " << numFiles << std::endl;
+
+    std::vector<std::string> fileNames;
+    std::vector<uint8_t> buffer;
+
+    for(int i = 0; i < numFiles; i++) {
+        // Recv name of each file
+        buffer.clear();
+        buffer.resize(64);
+        
+        // recvLen
+        int nameLength = 0;
+        if (recv(clientSock, &nameLength, sizeof(nameLength), 0) < 0) {
+            fatal_error("Error recieveing file name (getFiles)");
+        }
+
+        int bytes = recv(clientSock, buffer.data(), buffer.size(), 0);
+        if (bytes < 0) {
+            fatal_error("Error recieveing file name (getFiles)");
+        }
+
+        // Convert to string
+        std::string fname(buffer.begin(), buffer.begin() + bytes);
+
+        std::cout << "File name bytes (PULL): " << bytes << std::endl;
+        std::cout << "File name (PULL): " << fname << std::endl;
+
+        fileNames.push_back(fname);
+    }
+
+    // DEBUG: PRint file names
+    // std::cout << "File names (PULL)" << std::endl;
+    // for (auto& file : fileNames) {
+    //     std::cout << file << std::endl;
+    // }
+
+
+    return;
+}
+
+
+
 
 int main(int argc, char *argv[]) {
 
     // Get path into string
     std::string currentDirectoryPath;
+    std::string targetPath;
     std::vector<std::string> hashList;
     char cwd[PATH_MAX];    // Store current path
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        currentDirectoryPath = std::string(cwd);
+        targetPath = "/ClientStore";
+        currentDirectoryPath = std::string(cwd) + std::string(targetPath);
         std::cout << "Current directory: " << currentDirectoryPath << std::endl;
     } else {
         perror("getcwd() error");
     }
+
     // Get hash of all files
-    compute_hashes_in_directory(currentDirectoryPath,hashList);
+    compute_hashes_in_directory(currentDirectoryPath, hashList);
     int clientSock;                 // Socket descriptor
     struct sockaddr_in serv_addr;   // The server address
 
@@ -306,13 +386,13 @@ int main(int argc, char *argv[]) {
     }
 
     // Main client loop
+    int option = 0;
     while (true) {
-        int option;
         MessageRequest req;
         std::string res;
         std::vector<std::string> fileList;
 
-        msg_display(option); // Prompt for the user option
+        option = msg_display(); // Prompt for the user option
 
         switch(option) {
             case 1:
@@ -354,13 +434,16 @@ int main(int argc, char *argv[]) {
                 std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
                 // Load send buffer
                 sendBuff[0] = req.type;
-                send(clientSock, sendBuff.data(), sendBuff.size(), 0);
-                // Print the contents if sendBuff is string-based (e.g., vector<char>)
-                std::cout << "sendBuff sent: ";
-                for (const auto& byte : sendBuff) {
-                    std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-                }
-                std::cout << std::endl;
+
+                getFiles(sendBuff, recvBuff, clientSock, hashList);
+
+
+                // // Print the contents if sendBuff is string-based (e.g., vector<char>)
+                // std::cout << "sendBuff sent: ";
+                // for (const auto& byte : sendBuff) {
+                //     std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+                // }
+                // std::cout << std::endl;
                 break;
 
             case 4:
@@ -377,7 +460,7 @@ int main(int argc, char *argv[]) {
 
             default:
                 std::cout << "Invalid option. Please select a valid option." << std::endl;
-                continue;
+                exit(1);
         }
     }
 
