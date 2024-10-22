@@ -271,7 +271,7 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
 }
 
 // PULL Files
-void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, int& clientSock, std::vector<std::string>& hashList) {
+void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, int& clientSock, std::vector<std::string>& hashList,std::string& currentDirectoryPath) {
     // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
     // Print the contents if sendBuff is string-based (e.g., vector<char>)
@@ -348,10 +348,21 @@ void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, in
             }
             totalBytesReceived += bytesReceived;
         }
-
+        
         // Adjust the vector size to the actual number of bytes received
         recvBuff.resize(totalBytesReceived);
+        std::cout << "current directory" << currentDirectoryPath << std::endl;
 
+        // Write the received file to the specified directory
+        std::ofstream outFile(currentDirectoryPath + "/" + fileName, std::ios::binary);
+        if (outFile) {
+            outFile.write(reinterpret_cast<char*>(recvBuff.data()), fileSize);
+            outFile.close();
+            std::cout << "Received file saved as: " << currentDirectoryPath + "/" + fileName << std::endl;
+        } else {
+            std::cerr << "Error writing file: " << fileName << std::endl;
+        }
+    
         // Print the contents of the file
         std::string fileContent(recvBuff.begin(), recvBuff.end()); // Create a string from the buffer
         std::cout << "Contents of " << fileName << ": " << std::endl;
@@ -456,7 +467,7 @@ int main(int argc, char *argv[]) {
                 sendBuff[0] = req.type;
 
                 // Send request and receive the differences
-                getFiles(sendBuff, recvBuff, clientSock, hashList);
+                getFiles(sendBuff, recvBuff, clientSock, hashList,currentDirectoryPath);
 
                 break;
 
