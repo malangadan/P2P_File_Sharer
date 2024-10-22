@@ -271,12 +271,15 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
 }
 
 // PULL Files
-void getFiles(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock, std::vector<std::string> &hashList) {
-    
-
-    // Send Request
+std::vector<std::string> getFiles(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock, std::vector<std::string> &hashList) {
+    // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
-
+    // Print the contents if sendBuff is string-based (e.g., vector<char>)
+    std::cout << "sendBuff sent: ";
+    for (const auto& byte : sendBuff) {
+        std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+    }
+    std::cout << std::endl;
     // Send hashList
     int length = hashList.size();
     if (send(clientSock, &length, sizeof(length), 0) < 0) {
@@ -294,60 +297,36 @@ void getFiles(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, in
             fatal_error("List Error (hash): ");
         }
     }
-
-    // Recieve number of files
-    int numFiles = 0;
-    if(recv(clientSock, &numFiles, sizeof(numFiles), 0) < 0) {
-        fatal_error("Pull Error (NUmber of Files)");
+    
+    // Get response
+    int diffListLength = 0;
+    if (recv(clientSock, &diffListLength, sizeof(diffListLength), 0) < 0) {
+        fatal_error("Receive Error (diffListLength): ");
     }
 
-    // Print number of files
-    std::cout << "Number of Files: " << numFiles << std::endl;
+    std::cout << "Number of different files: " << diffListLength << std::endl;
 
-    std::vector<std::string> fileNames;
-    std::vector<uint8_t> buffer;
+    std::vector<std::string> diffList;
 
-    for(int i = 0; i < numFiles; i++) {
-        // Recv name of each file
-        buffer.clear();
-        buffer.resize(64);
-        
-        // recvLen
-        int nameLength = 0;
-        if (recv(clientSock, &nameLength, sizeof(nameLength), 0) < 0) {
-            fatal_error("Error recieveing file name (getFiles)");
+    // Receive each file's name or hash in the diff list
+    for (int i = 0; i < diffListLength; i++) {
+        // Receive file name length
+        int fileNameLength = 0;
+        if (recv(clientSock, &fileNameLength, sizeof(fileNameLength), 0) < 0) {
+            fatal_error("Receive Error (fileNameLength): ");
         }
 
-        int bytes = recv(clientSock, buffer.data(), buffer.size(), 0);
-        if (bytes < 0) {
-            fatal_error("Error recieveing file name (getFiles)");
+        // Resize buffer and receive the file name
+        recvBuff.resize(fileNameLength);
+        if (recv(clientSock, recvBuff.data(), fileNameLength, 0) < 0) {
+            fatal_error("Receive Error (fileName): ");
         }
 
-        // Convert to string
-        std::string fname(buffer.begin(), buffer.begin() + bytes);
-
-        std::cout << "File name bytes (PULL): " << bytes << std::endl;
-        std::cout << "File name (PULL): " << fname << std::endl;
-
-        fileNames.push_back(fname);
-
-        if (recv(clientSock, &nameLength, sizeof(nameLength), 0) < 0) {
-            fatal_error("Error recieveing file name (getFiles)");
-        }
-
-        std::cout << "File byte length (PULL): " << bytes << std::endl;
-        std::cout << "File bytes itself (PULL): " << fname << std::endl;
-
+        // Convert buffer to string and add to diffList
+        diffList.push_back(std::string(recvBuff.begin(), recvBuff.end()));
     }
 
-    // DEBUG: PRint file names
-    // std::cout << "File names (PULL)" << std::endl;
-    // for (auto& file : fileNames) {
-    //     std::cout << file << std::endl;
-    // }
-
-
-    return;
+    return diffList;
 }
 
 
@@ -440,18 +419,18 @@ int main(int argc, char *argv[]) {
             case 3:
                 req = createMessage(PULL);
                 std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+
                 // Load send buffer
                 sendBuff[0] = req.type;
 
-                getFiles(sendBuff, recvBuff, clientSock, hashList);
+                // Send request and receive the differences
+                fileList = getFiles(sendBuff, recvBuff, clientSock, hashList);
 
-
-                // // Print the contents if sendBuff is string-based (e.g., vector<char>)
-                // std::cout << "sendBuff sent: ";
-                // for (const auto& byte : sendBuff) {
-                //     std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-                // }
-                // std::cout << std::endl;
+                // Display the differences
+                for (auto& file : fileList) {
+                    std::cout << file << std::endl;
+                }
+                std::cout << std::endl;
                 break;
 
             case 4:

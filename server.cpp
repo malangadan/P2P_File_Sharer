@@ -326,7 +326,7 @@ int &clientSock, std::vector<File> &fileNameHash) {
         for (const auto &str : difference) {
             std::cout << str << std::endl;
         }
-        // Step 3: Send back the same vector to the client (or modify it if needed)
+        // Send back the same vector to the client (or modify it if needed)
         int sendVectorSize = difference.size();
         std::cout << "Difference of strings frm client size " << sendVectorSize<< std::endl;
 
@@ -346,16 +346,14 @@ int &clientSock, std::vector<File> &fileNameHash) {
         }
     }
     else if (type == PULL){
-        std::cout << "pull" << std::endl;
-
-        // Computer Hashes sendt from client
+        std::cout << "Type: DIFF" << std::endl;
+        // Generate difference
         int vectorSize = 0;
         if (recv(clientSock, &vectorSize, sizeof(vectorSize), 0) < 0) {
             fatal_error("Error receiving vector size");
         }
         std::cout << "Received vector size: " << vectorSize << std::endl;
-
-        // Serialize to vec of strings
+        
         std::vector<std::string> receivedStrings;
         receivedStrings.clear();
         for (int i = 0; i < vectorSize; ++i) {
@@ -372,79 +370,37 @@ int &clientSock, std::vector<File> &fileNameHash) {
             receivedStrings.push_back(std::string(buffer));
         }
         fileNameHash.clear();
-
         compute_hashes_in_directory(currentDirectoryPath,fileNameHash);
-        
         // Print received strings
         std::cout << "Received strings from client:" << std::endl;
         for (const auto &str : receivedStrings) {
             std::cout << str << std::endl;
         }
-        
-        // Generate Vector for difference
+
         std::vector<std::string> difference = serverDifference(fileNameHash,receivedStrings);
         std::cout << "Difference of strings from client:" << std::endl;
         for (const auto &str : difference) {
             std::cout << str << std::endl;
         }
-        std::cout << std::endl;
+        // Send back the same vector to the client (or modify it if needed)
+        int sendVectorSize = difference.size();
+        std::cout << "Difference of strings frm client size " << sendVectorSize<< std::endl;
 
-        // Get Files and send them
-        
-        // Send number of files
-        int numFiles = difference.size();
-        if (send(clientSock, &numFiles, sizeof(numFiles), 0) < 0) {
-            fatal_error("Error sending number of files (Pull)");
+        if (send(clientSock, &sendVectorSize, sizeof(sendVectorSize), 0) < 0) {
+            fatal_error("Error sending vector size");
         }
 
-        for (auto& file : difference) {
-            //Get file path
-            std::string fp = currentDirectoryPath + file;
-            std::vector<char> nameBuffer(64);
-            std::vector<uint8_t> buffer;
-
-            // Convert to buffer
-            buffer.clear();
-            buffer = copyFileToBuffer(fp);
-
-            // Print buffer
-            // for (auto& c : buffer) {
-            //     std::cout << c;
-            // }
-            // std::cout<<std::endl;
-
-            // Send file length
-            std::cout << "File name length: " << file.size() << std::endl;
-            int nameLength = file.size();
-            if (send(clientSock, &nameLength, sizeof(nameLength), 0) < 0) {
-                fatal_error("Error sending file size");
+        for (const auto &str : difference) {
+            int strLength = str.size();
+            if (send(clientSock, &strLength, sizeof(strLength), 0) < 0) {
+                fatal_error("Error sending string length");
             }
 
-            // Send name of file 
-            nameBuffer.clear();
-            nameBuffer.assign(file.begin(), file.end());
-            nameBuffer.push_back('\0');
-
-            std::cout << "File name: " << &nameBuffer[0] << std::endl;
-            if (send(clientSock, nameBuffer.data(), nameBuffer.size(), 0) < 0) {
-                fatal_error("Error sending file size");
-            }
-
-            // Send size of file
-            int bufferSize = buffer.size();
-            if (send(clientSock, &bufferSize, sizeof(bufferSize), 0) < 0) {
-                fatal_error("Error sending file size");
-            }
-
-            // Send vector
-
-            int sendVectorSize = buffer.size();
-            std::cout << "file buffer size " << sendVectorSize<< std::endl;
-
-            if (send(clientSock, &sendVectorSize, sizeof(sendVectorSize), 0) < 0) {
-                fatal_error("Error sending file size");
+            if (send(clientSock, str.c_str(), strLength, 0) < 0) {
+                fatal_error("Error sending string data");
             }
         }
+    }
 
     }
     // else if (nameBuf == "LEAVE"){
@@ -453,7 +409,7 @@ int &clientSock, std::vector<File> &fileNameHash) {
     //  else {
     //     nameBuf = "Unknown command please retry";
     // }
-}
+
 
 // Thread function for handling client connections
 void *handleClient(void *arg) {
