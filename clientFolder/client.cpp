@@ -1,7 +1,7 @@
 /*///////////////////////////////////////////////////////////
 *
 * FILE:        client.cpp
-* AUTHOR:      
+* AUTHOR:      Kaniel Vincenio and Mathew Alangadan
 * PROJECT:     CNT 4007 Project 2 - Professor Traynor
 * DESCRIPTION: Network Client Code (C++)
 *
@@ -43,16 +43,27 @@ void fatal_error(const std::string& message) {
 }
 
 void msg_display(int &option) {
-    std::cout << "Message Options" << std::endl;
-    std::cout << "1. List Files" << std::endl;
-    std::cout << "2. List Difference" << std::endl;
-    std::cout << "3. Pull Changes" << std::endl;
-    std::cout << "4. Leave" << std::endl;
+    while (true){
+        std::cout << "Message Options" << std::endl;
+        std::cout << "1. List Files" << std::endl;
+        std::cout << "2. List Difference" << std::endl;
+        std::cout << "3. Pull Changes" << std::endl;
+        std::cout << "4. Leave" << std::endl;
 
-    std::cout << std::endl;
-    std::cout << "Enter option: " << std::endl;
+        std::cout << std::endl;
+        std::cout << "Please enter an integer 1-4: " << std::endl;
 
-    std::cin >> option;
+        std::cin >> option;
+
+        if (std::cin.fail() || option < 1 || option > 4) {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Ignore invalid input
+            std::cout << "Invalid input. Please enter an integer between 1 and 4." << std::endl;
+        } else {
+            // Valid input
+            break;
+        }
+    }
 }
 
 uint8_t decodeType(RequestType type) {
@@ -162,11 +173,11 @@ MessageRequest createMessage(RequestType type) {
 
 std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock) {
     // Print the contents if sendBuff is string-based (e.g., vector<char>)
-    std::cout << "sendBuff sent: ";
-    for (const auto& byte : sendBuff) {
-        std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-    }
-    std::cout << std::endl;
+    // std::cout << "sendBuff sent: ";
+    // for (const auto& byte : sendBuff) {
+    //     std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+    // }
+    // std::cout << std::endl;
     // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
     // Check for response from server
@@ -179,7 +190,7 @@ std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uin
     }
 
     fileListLength = static_cast<unsigned>(recvBuff[0]);
-    std::cout << "File List Length: " << fileListLength << std::endl;
+    // std::cout << "File List Length: " << fileListLength << std::endl;
     std::vector<std::string> fileList;
 
     for(int i = 0; i < fileListLength; i++) {
@@ -212,11 +223,11 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
     // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
     // Print the contents if sendBuff is string-based (e.g., vector<char>)
-    std::cout << "sendBuff sent: ";
-    for (const auto& byte : sendBuff) {
-        std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-    }
-    std::cout << std::endl;
+    // std::cout << "sendBuff sent: ";
+    // for (const auto& byte : sendBuff) {
+    //     std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+    // }
+    // std::cout << std::endl;
     // Send hashList
     int length = hashList.size();
     if (send(clientSock, &length, sizeof(length), 0) < 0) {
@@ -229,7 +240,7 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
         if (send(clientSock, &hashLength, sizeof(hashLength), 0) < 0) {
             fatal_error("List Error (hashLength): ");
         }
-        std::cout << hash << std::endl;
+        // std::cout << hash << std::endl;
         if (send(clientSock, hash.c_str(), hashLength, 0) < 0) {
             fatal_error("List Error (hash): ");
         }
@@ -241,7 +252,7 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
         fatal_error("Receive Error (diffListLength): ");
     }
 
-    std::cout << "Number of different files: " << diffListLength << std::endl;
+    std::cout << "There are " << diffListLength << " files the server has that you do not. " << std::endl <<std::endl;
 
     std::vector<std::string> diffList;
 
@@ -276,7 +287,7 @@ int main(int argc, char *argv[]) {
     char cwd[PATH_MAX];    // Store current path
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         currentDirectoryPath = std::string(cwd);
-        std::cout << "Current directory: " << currentDirectoryPath << std::endl;
+        // std::cout << "Current directory: " << currentDirectoryPath << std::endl;
     } else {
         perror("getcwd() error");
     }
@@ -317,14 +328,14 @@ int main(int argc, char *argv[]) {
         switch(option) {
             case 1:
                 req = createMessage(LIST);
-                std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+                // std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
 
                 // Load send buffer
                 sendBuff[0] = req.type;
 
                 // Send request and receive the file list
                 fileList = getList(sendBuff, recvBuff, clientSock);
-
+                std::cout << "Here are all the files the server has: " << std::endl << std::endl;
                 // Display the file list
                 for (auto& file : fileList) {
                     std::cout << file << std::endl;
@@ -334,7 +345,7 @@ int main(int argc, char *argv[]) {
 
             case 2:
                 req = createMessage(DIFF);
-                std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+                // std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
 
                 // Load send buffer
                 sendBuff[0] = req.type;
@@ -351,7 +362,7 @@ int main(int argc, char *argv[]) {
 
             case 3:
                 req = createMessage(PULL);
-                std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+                // std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
                 // Load send buffer
                 sendBuff[0] = req.type;
                 send(clientSock, sendBuff.data(), sendBuff.size(), 0);

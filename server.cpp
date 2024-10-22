@@ -1,7 +1,7 @@
 /*/////////////////////////////////////////////////////////// 
  * FILE:        server.cpp
- * AUTHOR:      Your Name Here
- * PROJECT:     CNT 4007 Project 1 - Professor Traynor
+ * AUTHOR:      Kaniel Vincenio and Mathew Alangadan
+ * PROJECT:     CNT 4007 Project 2 - Professor Traynor
  * DESCRIPTION: Network Server Code (C++)
  *///////////////////////////////////////////////////////////*/
 
@@ -78,7 +78,7 @@ std::string getCurrentTime() {
 // Function to log client interactions
 void logClientData(const std::string& clientIdentifier, const std::string& message) {
     // Define the log file based on the clientIdentifier (IP + port)
-    std::string logFileName = "client_" + clientIdentifier + ".log";
+    std::string logFileName = "logs/client_" + clientIdentifier + ".log";
 
     // Open the log file in append mode
     std::ofstream logFile(logFileName, std::ios::app);
@@ -199,19 +199,20 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<F
             fileObj.hash = hexHash;
 
             // Debug prints for file name and hash
-            std::cout << "File: " << fileObj.fileName << std::endl;
-            std::cout << "Hash: " << fileObj.hash << std::endl;
+            // std::cout << "File: " << fileObj.fileName << std::endl;
+            // std::cout << "Hash: " << fileObj.hash << std::endl;
 
             fileNameHash.push_back(fileObj);
         }
     }
 }
 
-void listFiles(std::vector<std::string> &fileList, const std::string &currentDirectoryPath){
+void listFiles(std::vector<std::string> &fileList, const std::string &currentDirectoryPath) {
     for (const auto &entry : fs::directory_iterator(currentDirectoryPath)) {
-        std::string fname = entry.path().filename().string();
-        // std::cout << fname << std::endl;
-        fileList.push_back(fname);
+        if (fs::is_regular_file(entry) && entry.path().filename() != ".git") {
+            std::string fname = entry.path().filename().string();
+            fileList.push_back(fname);
+        }
     }
 }
 
@@ -221,7 +222,7 @@ std::vector<std::string> getHashList(std::vector<uint8_t> &sendBuff, std::vector
     if (recv(clientSock, &hashListLength, sizeof(hashListLength), 0) < 0) {
         fatal_error("Error receiving hash list length");
     }
-    std::cout << "Hash List Length: " << hashListLength << std::endl;
+    // std::cout << "Hash List Length: " << hashListLength << std::endl;
 
     std::vector<std::string> hashList;
 
@@ -250,15 +251,15 @@ std::vector<std::string> getHashList(std::vector<uint8_t> &sendBuff, std::vector
 
 void executeCommand(RequestType &type, std::vector<uint8_t> &sendBuff, const std::string &currentDirectoryPath,
 int &clientSock, std::vector<File> &fileNameHash) {
-    std::cout << type << std::endl;
+    // std::cout << type << std::endl;
     if (type == LIST) { 
-        std::cout << "Type: LIST" << std::endl;
+        std::cout << "LIST operation is being executed" << std::endl;
         
         std::vector<std::string> fileList;
         listFiles(fileList, currentDirectoryPath);
         
         int length = fileList.size();
-        std::cout << "fileList Size: " << length << std::endl;
+        // std::cout << "fileList Size: " << length << std::endl;
         if (send(clientSock, &length, sizeof(length), 0) < 0) {
             fatal_error("List Length Error: ");
         }
@@ -277,18 +278,18 @@ int &clientSock, std::vector<File> &fileNameHash) {
             if (send(clientSock, fname.c_str(), fnameLength, 0) < 0) {
                 fatal_error("List Error (fname): ");
             }
-            std::cout << fname << std::endl;
+            // std::cout << fname << std::endl;
         }
 
     }
      else if ((type == DIFF)) {
-        std::cout << "Type: DIFF" << std::endl;
+        std::cout << "DIFF operation is being executed" << std::endl;
         
         int vectorSize = 0;
         if (recv(clientSock, &vectorSize, sizeof(vectorSize), 0) < 0) {
             fatal_error("Error receiving vector size");
         }
-        std::cout << "Received vector size: " << vectorSize << std::endl;
+        // std::cout << "Received vector size: " << vectorSize << std::endl;
         
         std::vector<std::string> receivedStrings;
         receivedStrings.clear();
@@ -308,19 +309,19 @@ int &clientSock, std::vector<File> &fileNameHash) {
         fileNameHash.clear();
         compute_hashes_in_directory(currentDirectoryPath,fileNameHash);
         // Print received strings
-        std::cout << "Received strings from client:" << std::endl;
-        for (const auto &str : receivedStrings) {
-            std::cout << str << std::endl;
-        }
+        // std::cout << "Received strings from client:" << std::endl;
+        // for (const auto &str : receivedStrings) {
+        //     std::cout << str << std::endl;
+        // }
 
         std::vector<std::string> difference = serverDifference(fileNameHash,receivedStrings);
-        std::cout << "Difference of strings from client:" << std::endl;
-        for (const auto &str : difference) {
-            std::cout << str << std::endl;
-        }
-        // Step 3: Send back the same vector to the client (or modify it if needed)
+        // std::cout << "Difference of strings from client:" << std::endl;
+        // for (const auto &str : difference) {
+        //     std::cout << str << std::endl;
+        // }
+
         int sendVectorSize = difference.size();
-        std::cout << "Difference of strings frm client size " << sendVectorSize<< std::endl;
+        // std::cout << "Difference of strings from client size " << sendVectorSize<< std::endl;
 
         if (send(clientSock, &sendVectorSize, sizeof(sendVectorSize), 0) < 0) {
             fatal_error("Error sending vector size");
@@ -338,7 +339,7 @@ int &clientSock, std::vector<File> &fileNameHash) {
         }
     }
     else if (type == PULL){
-        std::cout << "pull" << std::endl;
+        // std::cout << "pull" << std::endl;
     }
     // else if (nameBuf == "LEAVE"){
     //     nameBuf = "Closing Connection";
@@ -428,7 +429,7 @@ int main(int argc, char *argv[]) {
         inet_ntop(AF_INET, &(changeClntAddr.sin_addr), clientIP, INET_ADDRSTRLEN);
         int clientPort = ntohs(changeClntAddr.sin_port);
 
-        // Create a unique identifier for the client (IP + port)
+        // Create a unique identifier for the client
         std::string clientIdentifier = std::string(clientIP) + "_" + std::to_string(clientPort);
 
         // Create a ClientData struct and populate it
@@ -445,7 +446,7 @@ int main(int argc, char *argv[]) {
             fatal_error("pthread_create() failed");
         }
 
-        pthread_detach(threadID);  // Release thread
+        pthread_detach(threadID);
     }
 
     return 0;

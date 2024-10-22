@@ -1,7 +1,7 @@
 #################################################################
 ##
 ## FILE:    Makefile
-## PROJECT: CNT 4007 Project 1 - Professor Traynor
+## PROJECT: CNT 4007 Project 2 - Professor Traynor
 ## DESCRIPTION: Compile client only
 ##
 #################################################################
