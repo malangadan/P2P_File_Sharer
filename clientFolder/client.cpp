@@ -278,6 +278,101 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
    
 }
 
+// PULL Files
+void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, int& clientSock, std::vector<std::string>& hashList,std::string& currentDirectoryPath) {
+    // Send message
+    send(clientSock, sendBuff.data(), sendBuff.size(), 0);
+    // Print the contents if sendBuff is string-based (e.g., vector<char>)
+    std::cout << "sendBuff sent: ";
+    for (const auto& byte : sendBuff) {
+        std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
+    }
+    std::cout << std::endl;
+
+    // Send hashList
+    int length = hashList.size();
+    if (send(clientSock, &length, sizeof(length), 0) < 0) {
+        fatal_error("List Length Error: ");
+    }
+
+    // Send each hash string
+    for (auto &hash : hashList) {
+        int hashLength = hash.size();
+        if (send(clientSock, &hashLength, sizeof(hashLength), 0) < 0) {
+            fatal_error("List Error (hashLength): ");
+        }
+        std::cout << hash << std::endl;
+        if (send(clientSock, hash.c_str(), hashLength, 0) < 0) {
+            fatal_error("List Error (hash): ");
+        }
+    }
+    
+    // Get response
+    int diffListLength = 0;
+    if (recv(clientSock, &diffListLength, sizeof(diffListLength), 0) < 0) {
+        fatal_error("Receive Error (diffListLength): ");
+    }
+
+    std::cout << "Number of different files: " << diffListLength << std::endl;
+
+    std::vector<std::string> diffList;
+
+    // Receive each file's name or hash in the diff list
+    for (int i = 0; i < diffListLength; i++) {
+        // Receive file name length
+        int fileNameLength = 0;
+        if (recv(clientSock, &fileNameLength, sizeof(fileNameLength), 0) < 0) {
+            fatal_error("Receive Error (fileNameLength): ");
+        }
+
+        // Resize buffer and receive the file name
+        recvBuff.resize(fileNameLength);
+        if (recv(clientSock, recvBuff.data(), fileNameLength, 0) < 0) {
+            fatal_error("Receive Error (fileName): ");
+        }
+
+        // Convert received data to string
+        std::string fileName(reinterpret_cast<char*>(recvBuff.data()), fileNameLength);
+        
+        // Get size of file
+        int fileSize = 0;
+        if (recv(clientSock, &fileSize, sizeof(fileSize), 0) < 0) {
+            fatal_error("Receive Error (fileSize): ");
+        }
+        std::cout << "File Size: " << fileSize << std::endl;
+
+        // Receive the file content in chunks
+        const size_t chunkSize = 1024; // Define the chunk size
+        recvBuff.resize(fileSize);
+        size_t totalBytesReceived = 0;
+
+        while (totalBytesReceived < fileSize) {
+            ssize_t bytesReceived = recv(clientSock, recvBuff.data() + totalBytesReceived, std::min(chunkSize, fileSize - totalBytesReceived), 0);
+            if (bytesReceived < 0) {
+                fatal_error("Receive Error (file contents): ");
+            } else if (bytesReceived == 0) {
+                // Connection closed unexpectedly
+                break;
+            }
+            totalBytesReceived += bytesReceived;
+        }
+        
+        // Adjust the vector size to the actual number of bytes received
+        recvBuff.resize(totalBytesReceived);
+        std::cout << "current directory" << currentDirectoryPath << std::endl;
+
+        // Write the received file to the specified directory
+        std::ofstream outFile(currentDirectoryPath + "/" + fileName, std::ios::binary);
+        if (outFile) {
+            outFile.write(reinterpret_cast<char*>(recvBuff.data()), fileSize);
+            outFile.close();
+            std::cout << "Received file saved as: " << currentDirectoryPath + "/" + fileName << std::endl;
+        } else {
+            std::cerr << "Error writing file: " << fileName << std::endl;
+        }
+    }
+}
+
 
 int main(int argc, char *argv[]) {
 
@@ -292,7 +387,6 @@ int main(int argc, char *argv[]) {
         perror("getcwd() error");
     }
     // Get hash of all files
-    compute_hashes_in_directory(currentDirectoryPath,hashList);
     int clientSock;                 // Socket descriptor
     struct sockaddr_in serv_addr;   // The server address
 
@@ -346,7 +440,7 @@ int main(int argc, char *argv[]) {
             case 2:
                 req = createMessage(DIFF);
                 // std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
-
+                compute_hashes_in_directory(currentDirectoryPath, hashList);
                 // Load send buffer
                 sendBuff[0] = req.type;
 
@@ -362,16 +456,12 @@ int main(int argc, char *argv[]) {
 
             case 3:
                 req = createMessage(PULL);
-                // std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+                std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
+                compute_hashes_in_directory(currentDirectoryPath, hashList);
                 // Load send buffer
                 sendBuff[0] = req.type;
-                send(clientSock, sendBuff.data(), sendBuff.size(), 0);
-                // Print the contents if sendBuff is string-based (e.g., vector<char>)
-                std::cout << "sendBuff sent: ";
-                for (const auto& byte : sendBuff) {
-                    std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-                }
-                std::cout << std::endl;
+                // Send request and receive the differences
+                getFiles(sendBuff, recvBuff, clientSock, hashList,currentDirectoryPath);
                 break;
 
             case 4:
