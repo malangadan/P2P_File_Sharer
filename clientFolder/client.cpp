@@ -81,6 +81,7 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
     for (const auto &entry : fs::directory_iterator(directoryPath)) {
         if (fs::is_regular_file(entry.path())) {
             std::string filePath = entry.path().string();
+            std::cout << "current files in the directory" << filePath<< std::endl;
             unsigned char hash[EVP_MAX_MD_SIZE];  // Buffer to store the hash
             unsigned int length = 0;
 
@@ -362,12 +363,6 @@ void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, in
         } else {
             std::cerr << "Error writing file: " << fileName << std::endl;
         }
-    
-        // Print the contents of the file
-        std::string fileContent(recvBuff.begin(), recvBuff.end()); // Create a string from the buffer
-        std::cout << "Contents of " << fileName << ": " << std::endl;
-        std::cout << fileContent; // Print the file content directly
-        std::cout << std::endl; // Newline for better readability
     }
 }
 
@@ -390,8 +385,7 @@ int main(int argc, char *argv[]) {
         perror("getcwd() error");
     }
 
-    // Get hash of all files
-    compute_hashes_in_directory(currentDirectoryPath, hashList);
+
     int clientSock;                 // Socket descriptor
     struct sockaddr_in serv_addr;   // The server address
 
@@ -445,7 +439,7 @@ int main(int argc, char *argv[]) {
             case 2:
                 req = createMessage(DIFF);
                 std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
-
+                compute_hashes_in_directory(currentDirectoryPath, hashList);
                 // Load send buffer
                 sendBuff[0] = req.type;
 
@@ -462,7 +456,7 @@ int main(int argc, char *argv[]) {
             case 3:
                 req = createMessage(PULL);
                 std::cout << "Message Type: " << static_cast<unsigned>(req.type) << std::endl;
-
+                compute_hashes_in_directory(currentDirectoryPath, hashList);
                 // Load send buffer
                 sendBuff[0] = req.type;
 
