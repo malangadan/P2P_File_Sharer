@@ -330,6 +330,14 @@ void getFiles(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, in
         std::cout << "File name (PULL): " << fname << std::endl;
 
         fileNames.push_back(fname);
+
+        if (recv(clientSock, &nameLength, sizeof(nameLength), 0) < 0) {
+            fatal_error("Error recieveing file name (getFiles)");
+        }
+
+        std::cout << "File byte length (PULL): " << bytes << std::endl;
+        std::cout << "File bytes itself (PULL): " << fname << std::endl;
+
     }
 
     // DEBUG: PRint file names

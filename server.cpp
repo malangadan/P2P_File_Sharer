@@ -243,7 +243,7 @@ std::vector<uint8_t> copyFileToBuffer(std::string filePath) {
         file.read(fileBuffer.data(), fileBuffer.size());
         std::streamsize bytesRead = file.gcount();
         std::cout << "bytes read: " << bytesRead << std::endl;
-    
+
         // append to end of buffer
         recvBuffer.insert(recvBuffer.end(), fileBuffer.begin(), fileBuffer.begin() + bytesRead);
     }
@@ -397,8 +397,6 @@ int &clientSock, std::vector<File> &fileNameHash) {
             fatal_error("Error sending number of files (Pull)");
         }
 
-        
-
         for (auto& file : difference) {
             //Get file path
             std::string fp = currentDirectoryPath + file;
@@ -423,45 +421,30 @@ int &clientSock, std::vector<File> &fileNameHash) {
             }
 
             // Send name of file 
-            // nameBuffer.clear();
-            // nameBuffer.assign(file.begin(), file.end());
-            // nameBuffer.push_back('\0');
+            nameBuffer.clear();
+            nameBuffer.assign(file.begin(), file.end());
+            nameBuffer.push_back('\0');
 
-            // std::cout << "File name: " << &nameBuffer[0] << std::endl;
-            // if (send(clientSock, nameBuffer.data(), nameBuffer.size(), 0) < 0) {
-            //     fatal_error("Error sending file size");
-            // }
+            std::cout << "File name: " << &nameBuffer[0] << std::endl;
+            if (send(clientSock, nameBuffer.data(), nameBuffer.size(), 0) < 0) {
+                fatal_error("Error sending file size");
+            }
 
             // Send size of file
-            // int bufferSize = buffer.size();
-            // if (send(clientSock, &bufferSize, sizeof(bufferSize), 0) < 0) {
-            //     fatal_error("Error sending file size");
-            // }
+            int bufferSize = buffer.size();
+            if (send(clientSock, &bufferSize, sizeof(bufferSize), 0) < 0) {
+                fatal_error("Error sending file size");
+            }
 
             // Send vector
 
-            // int sendVectorSize = buffer.size();
-            // std::cout << "file buffer size " << sendVectorSize<< std::endl;
+            int sendVectorSize = buffer.size();
+            std::cout << "file buffer size " << sendVectorSize<< std::endl;
 
-            // if (send(clientSock, &sendVectorSize, sizeof(sendVectorSize), 0) < 0) {
-            //     fatal_error("Error sending file size");
-            // }
-
-            // for (const auto &str : difference) {
-            //     int strLength = str.size();
-            //     if (send(clientSock, &strLength, sizeof(strLength), 0) < 0) {
-            //         fatal_error("Error sending string length");
-            //     }
-
-            //     if (send(clientSock, str.c_str(), strLength, 0) < 0) {
-            //         fatal_error("Error sending string data");
-            //     }
-            // }
-        }
-        
-        
-
-        
+            if (send(clientSock, &sendVectorSize, sizeof(sendVectorSize), 0) < 0) {
+                fatal_error("Error sending file size");
+            }
+            
 
     }
     // else if (nameBuf == "LEAVE"){
