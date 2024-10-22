@@ -322,8 +322,17 @@ std::vector<std::string> getFiles(std::vector<uint8_t> &sendBuff, std::vector<ui
             fatal_error("Receive Error (fileName): ");
         }
 
+        // Get size of file
+        int fileSize = 0;
+        if (recv(clientSock, &fileSize, sizeof(fileSize), 0) < 0) {
+            fatal_error("Receive Error (fileName): ");
+        }
+
+        std::cout << "File Size: " << fileSize << std::endl;
+
         // Convert buffer to string and add to diffList
         diffList.push_back(std::string(recvBuff.begin(), recvBuff.end()));
+
     }
 
     return diffList;

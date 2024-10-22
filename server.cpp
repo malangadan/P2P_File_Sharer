@@ -399,6 +399,18 @@ int &clientSock, std::vector<File> &fileNameHash) {
             if (send(clientSock, str.c_str(), strLength, 0) < 0) {
                 fatal_error("Error sending string data");
             }
+
+            // Send file contents
+            std::string fp = currentDirectoryPath + str;
+            std::vector<uint8_t> buffer;
+            buffer = copyFileToBuffer(fp);
+
+            // std::cout << "Buffer size: " << buffer.size() << std::endl;
+            int fileSize = buffer.size();            
+            if (send(clientSock, &fileSize, sizeof(fileSize), 0) < 0) {
+                fatal_error("Error sending file size");
+            }
+
         }
     }
 
