@@ -33,7 +33,6 @@ enum RequestType {
 };
 
 struct MessageRequest {
-    // std::vector<std::string> payLoad;
     uint8_t type;
 };
 
@@ -83,7 +82,7 @@ uint8_t decodeType(RequestType type) {
     }
 }
 
-// Function to compute the hashes of all files in a directory and append them to a given string
+// Compute hashes of all files in directory
 void compute_hashes_in_directory(const std::string &directoryPath, std::vector<std::string> &hashList) {
 // Iterate over all files in directory
     for (const auto &entry : fs::directory_iterator(directoryPath)) {
@@ -92,7 +91,7 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
             unsigned char hash[EVP_MAX_MD_SIZE];  // Buffer to store the hash
             unsigned int length = 0;
 
-            // Initialize the OpenSSL for SHA-256
+            // Initialize the OpenSSL
             EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
             if (mdctx == NULL) {
                 std::cerr << "Error: Failed to create EVP_MD_CTX" << std::endl;
@@ -117,7 +116,7 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
             // Get the file size to decide whether it's small or large
             file.seekg(0, std::ifstream::end);
             std::streamsize fileSize = file.tellg();
-            file.seekg(0, std::ifstream::beg); // Reset file pointer to the beginning
+            file.seekg(0, std::ifstream::beg); 
 
             if (fileSize <= 1024) {
                 // For files <= 1 KB, read the whole file at once
@@ -140,7 +139,6 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
                 }
             }
 
-            // Finalize the SHA-256 digest
             if (EVP_DigestFinal_ex(mdctx, hash, &length) != 1) {
                 std::cerr << "Error: Failed to finalize SHA-256 hash" << std::endl;
                 EVP_MD_CTX_free(mdctx);
@@ -149,7 +147,7 @@ void compute_hashes_in_directory(const std::string &directoryPath, std::vector<s
 
             EVP_MD_CTX_free(mdctx);
 
-            // Convert the hash to a hexadecimal string
+            // Convert to string
             std::string hexHash;
             for (unsigned int i = 0; i < length; i++) {
                 char hex[3];
@@ -172,17 +170,9 @@ MessageRequest createMessage(RequestType type) {
 }
 
 std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock) {
-    // Print the contents if sendBuff is string-based (e.g., vector<char>)
-    // std::cout << "sendBuff sent: ";
-    // for (const auto& byte : sendBuff) {
-    //     std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-    // }
-    // std::cout << std::endl;
-    // Send message
+    // Send message request
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
     // Check for response from server
-
-    // std::cout << static_cast<unsigned>(recvBuff[0]) << std::endl;
 
     int fileListLength = 0;
     if (recv(clientSock, recvBuff.data(), sizeof(fileListLength), 0) < 0) {
@@ -190,7 +180,6 @@ std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uin
     }
 
     fileListLength = static_cast<unsigned>(recvBuff[0]);
-    // std::cout << "File List Length: " << fileListLength << std::endl;
     std::vector<std::string> fileList;
 
     for(int i = 0; i < fileListLength; i++) {
@@ -200,9 +189,6 @@ std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uin
         if (recv(clientSock, &fnameLength, sizeof(fnameLength), 0) < 0) {
             fatal_error("Error getList (fnameLength): ");
         }
-
-        // DEBUG: fname length
-        // std::cout << "fname length: " << fnameLength << std::endl;
 
         // Get filestring
         recvBuff.resize(fnameLength);
@@ -222,13 +208,7 @@ std::vector<std::string> getList(std::vector<uint8_t> &sendBuff, std::vector<uin
 std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock, std::vector<std::string> &hashList) {
     // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
-    // Print the contents if sendBuff is string-based (e.g., vector<char>)
-    // std::cout << "sendBuff sent: ";
-    // for (const auto& byte : sendBuff) {
-    //     std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-    // }
-    // std::cout << std::endl;
-    // Send hashList
+
     int length = hashList.size();
     if (send(clientSock, &length, sizeof(length), 0) < 0) {
         fatal_error("List Length Error: ");
@@ -240,7 +220,6 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
         if (send(clientSock, &hashLength, sizeof(hashLength), 0) < 0) {
             fatal_error("List Error (hashLength): ");
         }
-        // std::cout << hash << std::endl;
         if (send(clientSock, hash.c_str(), hashLength, 0) < 0) {
             fatal_error("List Error (hash): ");
         }
@@ -280,14 +259,8 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
 
 // PULL Files
 void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, int& clientSock, std::vector<std::string>& hashList,std::string& currentDirectoryPath) {
-    // Send message
+    // Send message request
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
-    // Print the contents if sendBuff is string-based (e.g., vector<char>)
-    std::cout << "sendBuff sent: ";
-    for (const auto& byte : sendBuff) {
-        std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
-    }
-    std::cout << std::endl;
 
     // Send hashList
     int length = hashList.size();
@@ -301,7 +274,6 @@ void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, in
         if (send(clientSock, &hashLength, sizeof(hashLength), 0) < 0) {
             fatal_error("List Error (hashLength): ");
         }
-        std::cout << hash << std::endl;
         if (send(clientSock, hash.c_str(), hashLength, 0) < 0) {
             fatal_error("List Error (hash): ");
         }
@@ -312,8 +284,6 @@ void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, in
     if (recv(clientSock, &diffListLength, sizeof(diffListLength), 0) < 0) {
         fatal_error("Receive Error (diffListLength): ");
     }
-
-    std::cout << "Number of different files: " << diffListLength << std::endl;
 
     std::vector<std::string> diffList;
 
@@ -339,7 +309,6 @@ void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, in
         if (recv(clientSock, &fileSize, sizeof(fileSize), 0) < 0) {
             fatal_error("Receive Error (fileSize): ");
         }
-        std::cout << "File Size: " << fileSize << std::endl;
 
         // Receive the file content in chunks
         const size_t chunkSize = 1024; // Define the chunk size
@@ -359,7 +328,6 @@ void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, in
         
         // Adjust the vector size to the actual number of bytes received
         recvBuff.resize(totalBytesReceived);
-        std::cout << "current directory" << currentDirectoryPath << std::endl;
 
         // Write the received file to the specified directory
         std::ofstream outFile(currentDirectoryPath + "/" + fileName, std::ios::binary);
