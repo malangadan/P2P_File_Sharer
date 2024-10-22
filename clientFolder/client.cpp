@@ -378,10 +378,13 @@ int main(int argc, char *argv[]) {
 
     // Get path into string
     std::string currentDirectoryPath;
+    std::string targetPath;
     std::vector<std::string> hashList;
     char cwd[PATH_MAX];    // Store current path
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         currentDirectoryPath = std::string(cwd);
+        targetPath = "/ClientStore";
+        currentDirectoryPath = std::string(cwd) + std::string(targetPath);
         // std::cout << "Current directory: " << currentDirectoryPath << std::endl;
     } else {
         perror("getcwd() error");

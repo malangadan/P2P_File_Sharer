@@ -479,9 +479,11 @@ void *handleClient(void *arg) {
     std::vector<uint8_t> sendBuffer(SNDBUFSIZE);
     std::vector<File> fileNameHash;
     std::string currentDirectoryPath;
+    std::string targetDirectoryPath;
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        currentDirectoryPath = std::string(cwd);
+        targetDirectoryPath = "/ServerStore/";
+        currentDirectoryPath = std::string(cwd) + std::string(targetDirectoryPath);
     } else {
         perror("getcwd() error");
     }
