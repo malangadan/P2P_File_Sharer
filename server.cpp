@@ -242,7 +242,7 @@ std::vector<uint8_t> copyFileToBuffer(std::string filePath) {
     while (file) {
         file.read(fileBuffer.data(), fileBuffer.size());
         std::streamsize bytesRead = file.gcount();
-        std::cout << "bytes read: " << bytesRead << std::endl;
+        // std::cout << "bytes read: " << bytesRead << std::endl;
     
         // append to end of buffer
         recvBuffer.insert(recvBuffer.end(), fileBuffer.begin(), fileBuffer.begin() + bytesRead);
