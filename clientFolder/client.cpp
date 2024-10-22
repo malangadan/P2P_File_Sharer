@@ -271,7 +271,7 @@ std::vector<std::string> getDiff(std::vector<uint8_t> &sendBuff, std::vector<uin
 }
 
 // PULL Files
-std::vector<std::string> getFiles(std::vector<uint8_t> &sendBuff, std::vector<uint8_t> &recvBuff, int &clientSock, std::vector<std::string> &hashList) {
+void getFiles(std::vector<uint8_t>& sendBuff, std::vector<uint8_t>& recvBuff, int& clientSock, std::vector<std::string>& hashList) {
     // Send message
     send(clientSock, sendBuff.data(), sendBuff.size(), 0);
     // Print the contents if sendBuff is string-based (e.g., vector<char>)
@@ -280,6 +280,7 @@ std::vector<std::string> getFiles(std::vector<uint8_t> &sendBuff, std::vector<ui
         std::cout << static_cast<int>(byte) << " ";  // Cast to int to print the byte value
     }
     std::cout << std::endl;
+
     // Send hashList
     int length = hashList.size();
     if (send(clientSock, &length, sizeof(length), 0) < 0) {
@@ -322,21 +323,43 @@ std::vector<std::string> getFiles(std::vector<uint8_t> &sendBuff, std::vector<ui
             fatal_error("Receive Error (fileName): ");
         }
 
+        // Convert received data to string
+        std::string fileName(reinterpret_cast<char*>(recvBuff.data()), fileNameLength);
+        
         // Get size of file
         int fileSize = 0;
         if (recv(clientSock, &fileSize, sizeof(fileSize), 0) < 0) {
-            fatal_error("Receive Error (fileName): ");
+            fatal_error("Receive Error (fileSize): ");
         }
-
         std::cout << "File Size: " << fileSize << std::endl;
 
-        // Convert buffer to string and add to diffList
-        diffList.push_back(std::string(recvBuff.begin(), recvBuff.end()));
+        // Receive the file content in chunks
+        const size_t chunkSize = 1024; // Define the chunk size
+        recvBuff.resize(fileSize);
+        size_t totalBytesReceived = 0;
 
+        while (totalBytesReceived < fileSize) {
+            ssize_t bytesReceived = recv(clientSock, recvBuff.data() + totalBytesReceived, std::min(chunkSize, fileSize - totalBytesReceived), 0);
+            if (bytesReceived < 0) {
+                fatal_error("Receive Error (file contents): ");
+            } else if (bytesReceived == 0) {
+                // Connection closed unexpectedly
+                break;
+            }
+            totalBytesReceived += bytesReceived;
+        }
+
+        // Adjust the vector size to the actual number of bytes received
+        recvBuff.resize(totalBytesReceived);
+
+        // Print the contents of the file
+        std::string fileContent(recvBuff.begin(), recvBuff.end()); // Create a string from the buffer
+        std::cout << "Contents of " << fileName << ": " << std::endl;
+        std::cout << fileContent; // Print the file content directly
+        std::cout << std::endl; // Newline for better readability
     }
-
-    return diffList;
 }
+
 
 
 
@@ -433,13 +456,8 @@ int main(int argc, char *argv[]) {
                 sendBuff[0] = req.type;
 
                 // Send request and receive the differences
-                fileList = getFiles(sendBuff, recvBuff, clientSock, hashList);
+                getFiles(sendBuff, recvBuff, clientSock, hashList);
 
-                // Display the differences
-                for (auto& file : fileList) {
-                    std::cout << file << std::endl;
-                }
-                std::cout << std::endl;
                 break;
 
             case 4:
