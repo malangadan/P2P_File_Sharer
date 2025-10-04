@@ -1,5 +1,3 @@
-# CNT4007 Project 2
-
 Authors:
 
 - Matthew Alangadan
